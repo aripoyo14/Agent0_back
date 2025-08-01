@@ -1,0 +1,2 @@
+language: python
+startupCommand: python startup.py 
