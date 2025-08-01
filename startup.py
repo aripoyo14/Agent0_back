@@ -10,6 +10,25 @@ print(f"Current working directory: {os.getcwd()}")
 print(f"Current directory: {current_dir}")
 print(f"Files in current directory: {os.listdir(current_dir)}")
 
+# 複数の可能な場所をチェック
+possible_paths = [
+    current_dir,
+    os.path.join(current_dir, 'app'),
+    '/home/site/wwwroot',
+    '/tmp/8ddd10a63c8f7a1',  # Azure App Serviceの一時ディレクトリ
+]
+
+for path in possible_paths:
+    if os.path.exists(path):
+        print(f"Path exists: {path}")
+        try:
+            files = os.listdir(path)
+            print(f"Files in {path}: {files}")
+        except Exception as e:
+            print(f"Error listing files in {path}: {e}")
+    else:
+        print(f"Path does not exist: {path}")
+
 try:
     from app.main import app
     print("Successfully imported app.main")
