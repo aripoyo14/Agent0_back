@@ -1,1 +1,1 @@
-python startup.py 
+echo "Starting application..." && python startup.py 
