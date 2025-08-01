@@ -1,2 +1,1 @@
-startup.sh text eol=lf executable
-*.sh text eol=lf executable 
+startup.sh text eol=lf executable 
