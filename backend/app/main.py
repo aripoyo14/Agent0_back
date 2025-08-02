@@ -12,4 +12,4 @@ app.include_router(user.router)
 
 @app.get("/")
 def root():
-    return {"message": "Hello from BBC backend"}
+    return {"message": "AgentØ"}
