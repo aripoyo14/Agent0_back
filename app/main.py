@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.api.routes import video, auth, line, coach ,user
+from app.api.routes import video, auth, line, coach, user
 
 app = FastAPI()
 
