@@ -1,35 +1,49 @@
-from sqlalchemy import Column, String, Text, Date, DateTime, Integer
-from sqlalchemy.dialects.mysql import VARCHAR
-from sqlalchemy.sql import func
+from sqlalchemy import Column, String, Boolean, DateTime
+from sqlalchemy.dialects.mysql import CHAR
+from datetime import datetime, timezone
 from app.db.base_class import Base
 import uuid
 
 class User(Base):
+    """
+    - 経産省職員ユーザー情報を格納するテーブル。
+    - UUIDベースのIDを主キーとして使用し、メール・氏名など基本属性を保持。
+    """
+
     __tablename__ = "users"
 
-    user_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    usertype = Column(VARCHAR(50), nullable=False, default="user")
-    username = Column(VARCHAR(255), nullable=False)
-    email = Column(VARCHAR(255), nullable=False, unique=True)
-    password_hash = Column(VARCHAR(255), nullable=False)
-    line_user_id = Column(VARCHAR(255), unique=True, nullable=True)
+    # ユーザーID （UUID / 主キー / 固定長）
+    id = Column(CHAR(36), primary_key=True, default=lambda: str(uuid.uuid4()))
 
-    profile_picture_url = Column(Text, nullable=True)
-    bio = Column(Text, nullable=True)
+    # ログインID （メールアドレス） ※一意制約
+    email = Column(String(255), unique=True, nullable=False)
 
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    # ハッシュ化されたパスワード
+    password_hash = Column(String(255), nullable=False)
 
-    birthday = Column(Date, nullable=True)
-    golf_score_ave = Column(Integer, nullable=True)
-    golf_exp = Column(Integer, nullable=True)
+    # 姓
+    last_name = Column(String(50), nullable=False)
 
-    zip_code = Column(VARCHAR(10), nullable=True)
-    state = Column(VARCHAR(50), nullable=True)
-    address1 = Column(VARCHAR(255), nullable=True)
-    address2 = Column(VARCHAR(255), nullable=True)
+    # 名
+    first_name = Column(String(50), nullable=False)
 
-    sport_exp = Column(VARCHAR(100), nullable=True)
-    industry = Column(VARCHAR(100), nullable=True)
-    job_title = Column(VARCHAR(100), nullable=True)
-    position = Column(VARCHAR(100), nullable=True)
+    # 内線番号 （任意）
+    extension = Column(String(20))
+
+    # 直通番号 （任意）
+    direct_phone = Column(String(20))
+
+    # 利用可能フラグ （論理削除などに利用）
+    is_active = Column(Boolean, default=True)
+
+    # 管理者フラグ （Trueで管理権限あり）
+    is_admin = Column(Boolean, default=False)
+
+    # 最終ログイン日時 （認証成功時に更新）
+    last_login_at = Column(DateTime)
+
+    # レコード作成日時 （UTC）
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # レコード更新日時 （更新時に自動更新 / UTC）
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

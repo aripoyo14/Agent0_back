@@ -1,33 +1,32 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
-from datetime import date, datetime
+from datetime import datetime
+from uuid import UUID
 
+# ユーザー登録用スキーマ（POST /register で使う）
 class UserCreate(BaseModel):
-    username: str
     email: EmailStr
-    password: str
-    usertype: str = "user" 
-    birthday: Optional[date] = None
-    line_user_id: Optional[str] = None
-    profile_picture_url: Optional[str] = None
-    bio: Optional[str] = None
-    golf_score_ave: Optional[int] = None
-    golf_exp: Optional[int] = None
-    zip_code: Optional[str] = None
-    state: Optional[str] = None
-    address1: Optional[str] = None
-    address2: Optional[str] = None
-    sport_exp: Optional[str] = None
-    industry: Optional[str] = None
-    job_title: Optional[str] = None
-    position: Optional[str] = None
+    password: str = Field(min_length=8)
+    last_name: str
+    first_name: str
+    extension: Optional[str] = None
+    direct_phone: Optional[str] = None
 
+# ユーザー表示用（レスポンスなどで使用）
 class UserOut(BaseModel):
-    user_id: str
-    username: str
+    id: UUID
     email: EmailStr
+    last_name: str
+    first_name: str
+    extension: Optional[str] = None
+    direct_phone: Optional[str] = None
+    is_active: bool
+    is_admin: bool
+    last_login_at: Optional[datetime]
     created_at: datetime
+    updated_at: datetime
 
     model_config = {
+        # Pydantic v2 で ORM 変換を許可
         "from_attributes": True
     }

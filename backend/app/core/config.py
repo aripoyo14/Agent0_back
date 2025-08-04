@@ -2,8 +2,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from dotenv import load_dotenv
 import os
+from pathlib import Path
 
 load_dotenv()
+
+# プロジェクトルート基準の絶対パスを取得
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 class Settings(BaseSettings):
     database_host: str = Field(default="localhost", alias="DATABASE_HOST")
@@ -11,6 +15,7 @@ class Settings(BaseSettings):
     database_name: str = Field(default="agent0", alias="DATABASE_NAME")
     database_username: str = Field(default="students", alias="DATABASE_USERNAME")
     database_password: str = Field(default="password123", alias="DATABASE_PASSWORD")
+    ssl_ca_path: str = Field(default="DigiCertGlobalRootCA.crt.pem", alias="DATABASE_SSL_CA_PATH")
 
     secret_key: str = Field(default="your-secret-key-here-make-it-long-and-secure", alias="SECRET_KEY")
     algorithm: str = Field(default="HS256", alias="ALGORITHM")
@@ -20,6 +25,15 @@ class Settings(BaseSettings):
         env_file=".env",  # プロジェクトルートにある.envファイルを指定
         extra="ignore"    # 不要な.env項目は無視
     )
+
+    def get_database_url(self) -> str:
+        return (
+            f"mysql+pymysql://{self.database_username}:{self.database_password}"
+            f"@{self.database_host}:{self.database_port}/{self.database_name}"
+        )
+
+    def get_ssl_ca_absolute_path(self) -> str:
+        return str(Path(self.ssl_ca_path).resolve())
 
 settings = Settings()
 

@@ -1,23 +1,17 @@
-from datetime import datetime, timedelta
-from jose import jwt
+""" 
+ - パスワードのハッシュ化および検証を行うモジュール。
+ - セキュリティ上、パスワードを平文で保存せず、安全な形式で保存するために使用。
+"""
+
 from passlib.context import CryptContext
 
-# パスワードハッシュ用設定
+# bcryptアルゴリズムを使用するハッシュコンテキストを定義
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-def get_password_hash(password: str) -> str:
+# パスワードをハッシュ化する関数 (与えられた平文パスワードを bcrypt でハッシュ化して返す)
+def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
+# 入力されたパスワードとハッシュ値を照合する関数
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
-
-# JWT設定
-SECRET_KEY = "your-secret-key"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-
-def create_access_token(data: dict, expires_delta: timedelta | None = None):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
