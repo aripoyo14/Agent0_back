@@ -14,7 +14,7 @@ from app.db.session import SessionLocal
 
 
 # FastAPIのルーターを初期化
-router = APIRouter()
+router = APIRouter(prefix="/users", tags=["Users"])
 
 # DBセッションをリクエストごとに生成・提供する関数
 def get_db():
