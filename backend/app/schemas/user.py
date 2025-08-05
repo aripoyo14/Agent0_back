@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
+from typing import Optional, Literal
 from datetime import datetime
 from uuid import UUID
 
@@ -11,6 +11,8 @@ class UserCreate(BaseModel):
     first_name: str
     extension: Optional[str] = None
     direct_phone: Optional[str] = None
+    department_id: int  
+    position_id: int    
 
 # ユーザー表示用（レスポンスなどで使用）
 class UserOut(BaseModel):
@@ -21,7 +23,7 @@ class UserOut(BaseModel):
     extension: Optional[str] = None
     direct_phone: Optional[str] = None
     is_active: bool
-    is_admin: bool
+    role: Literal['admin', 'staff']
     last_login_at: Optional[datetime]
     created_at: datetime
     updated_at: datetime

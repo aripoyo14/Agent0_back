@@ -28,8 +28,11 @@ def login_user(request: LoginRequest, db: Session = Depends(get_db)):
             detail="メールアドレスまたはパスワードが正しくありません。",
         )
 
-    # JWTトークンを発行（ペイロードに user.id を含める）
-    token = create_access_token({"sub": str(user.id)})
+    # JWTトークンを発行（ペイロードに user.id と user.role　を含める）
+    token = create_access_token({
+        "sub": str(user.id),
+        "role": user.role
+    })
 
     # トークンをレスポンスとして返す
     return TokenResponse(access_token=token)
