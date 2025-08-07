@@ -11,3 +11,15 @@ python-multipart
 aiofiles
 azure-storage-blob
 email-validator
+
+# AI
+openai==1.70.0
+
+# Vector Database
+pinecone==6.0.2
+
+# LangChain
+langchain==0.3.23  # LangChainメインパッケージ
+langchain-core==0.3.51  # LangChainコア機能
+langchain-community==0.3.21  # LangChainコミュニティ機能
+langchain-openai==0.3.12  # LangChain OpenAI統合

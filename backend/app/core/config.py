@@ -1,3 +1,4 @@
+from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from dotenv import load_dotenv
@@ -10,6 +11,7 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 class Settings(BaseSettings):
+    # Database
     database_host: str = Field(default="localhost", alias="DATABASE_HOST")
     database_port: int = Field(default=3306, alias="DATABASE_PORT")
     database_name: str = Field(default="agent0", alias="DATABASE_NAME")
@@ -17,9 +19,16 @@ class Settings(BaseSettings):
     database_password: str = Field(default="password123", alias="DATABASE_PASSWORD")
     ssl_ca_path: str = Field(default="DigiCertGlobalRootCA.crt.pem", alias="DATABASE_SSL_CA_PATH")
 
+    # 認証
     secret_key: str = Field(default="your-secret-key-here-make-it-long-and-secure", alias="SECRET_KEY")
     algorithm: str = Field(default="HS256", alias="ALGORITHM")
     access_token_expire_minutes: int = Field(default=30, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
+
+    # 外部API
+    openai_api_key: str = Field(default="your-openai-api-key-here", alias="OPENAI_API_KEY")
+    pinecone_api_key: str = Field(default="your-pinecone-api-key-here", alias="PINECONE_API_KEY")
+    pinecone_env: str = Field(default="your-pinecone-environment-here", alias="PINECONE_ENVIRONMENT")
+    pinecone_index: str = Field(default="your-pinecone-index-here", alias="PINECONE_INDEX")
 
     model_config = SettingsConfigDict(
         env_file=".env",  # プロジェクトルートにある.envファイルを指定
@@ -38,3 +47,7 @@ class Settings(BaseSettings):
 settings = Settings()
 
 print("✅ Loaded settings:", settings.dict())
+
+@lru_cache
+def get_settings() -> Settings:
+    return settings

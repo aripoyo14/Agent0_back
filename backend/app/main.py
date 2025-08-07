@@ -1,7 +1,12 @@
 from fastapi import FastAPI
-from app.api.routes import user, auth
+from app.api.routes import user, auth, summary
+from app.core.startup import init_external_services
 
 app = FastAPI()
+
+@app.on_event("startup")
+async def startup_event():
+    await init_external_services()
 
 """ ----------
  ルーター登録
@@ -15,6 +20,8 @@ app = FastAPI()
 app.include_router(user.router, prefix="/api")   
 # 認証関連API（ログイン・トークン発行） 
 app.include_router(auth.router, prefix="/api")
+# 面談録要約API
+app.include_router(summary.router, prefix="/api")
 
 
 @app.get("/")
