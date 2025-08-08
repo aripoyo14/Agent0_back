@@ -30,6 +30,10 @@ def generate_summary(text: str) -> dict:
         )
         content = response.choices[0].message.content
         
+        # まず、コードブロック（```json ... ```）を除去
+        content = re.sub(r'```json\s*', '', content)
+        content = re.sub(r'\s*```', '', content)
+        
         # JSONをパースして辞書に変換
         try:
             summary_dict = json.loads(content)
