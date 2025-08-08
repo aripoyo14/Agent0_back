@@ -11,6 +11,7 @@ python-multipart
 aiofiles
 azure-storage-blob
 email-validator
+requests
 
 # AI
 openai==1.70.0

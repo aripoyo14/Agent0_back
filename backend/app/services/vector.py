@@ -1,5 +1,8 @@
 # ベクトルデータベース関連のインポート
+import os
 from pinecone import Pinecone, ServerlessSpec
+from langchain_openai import OpenAIEmbeddings
+from dotenv import load_dotenv
 
 # .env ファイルの読み込み（環境変数を使うため）
 load_dotenv()

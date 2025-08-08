@@ -8,6 +8,8 @@ from pathlib import Path
 load_dotenv()
 
 # プロジェクトルート基準の絶対パスを取得
+# このファイルは `backend/backend/app/core/config.py` 配下にあるため、
+# プロジェクトルートは2つ上の親ディレクトリ
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 class Settings(BaseSettings):
@@ -17,7 +19,7 @@ class Settings(BaseSettings):
     database_name: str = Field(default="agent0", alias="DATABASE_NAME")
     database_username: str = Field(default="students", alias="DATABASE_USERNAME")
     database_password: str = Field(default="password123", alias="DATABASE_PASSWORD")
-    ssl_ca_path: str = Field(default="DigiCertGlobalRootCA.crt.pem", alias="DATABASE_SSL_CA_PATH")
+    ssl_ca_path: str = Field(default="", alias="DATABASE_SSL_CA_PATH")
 
     # 認証
     secret_key: str = Field(default="your-secret-key-here-make-it-long-and-secure", alias="SECRET_KEY")
@@ -42,7 +44,27 @@ class Settings(BaseSettings):
         )
 
     def get_ssl_ca_absolute_path(self) -> str:
-        return str(Path(self.ssl_ca_path).resolve())
+        """SSL証明書の絶対パスを取得する。ファイルが存在しない場合はNoneを返す"""
+        # SSL証明書パスが空の場合はNoneを返す
+        if not self.ssl_ca_path:
+            print("ℹ️  SSL証明書パスが設定されていません")
+            return None
+            
+        ssl_path = Path(self.ssl_ca_path)
+        
+        # 相対パスの場合、プロジェクトルートからの絶対パスに変換
+        # `BASE_DIR` は `backend/backend/app` を指すため、プロジェクトルートは `BASE_DIR.parent.parent`
+        if not ssl_path.is_absolute():
+            ssl_path = BASE_DIR.parent.parent / self.ssl_ca_path
+        
+        # ファイルが存在するかチェック
+        if ssl_path.exists():
+            print(f"✅ SSL証明書ファイルが見つかりました: {ssl_path}")
+            return str(ssl_path.resolve())
+        else:
+            print(f"⚠️  SSL証明書ファイルが見つかりません: {ssl_path}")
+            print(f"   期待される場所: {ssl_path.absolute()}")
+            return None
 
 settings = Settings()
 

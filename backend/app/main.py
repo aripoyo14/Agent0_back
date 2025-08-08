@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.api.routes import user, auth, summary
+from app.api.routes import user, auth, summary, policy_tag
 from app.core.startup import init_external_services
 
 app = FastAPI()
@@ -22,6 +22,8 @@ app.include_router(user.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 # 面談録要約API
 app.include_router(summary.router, prefix="/api")
+# 政策タグ関連API
+app.include_router(policy_tag.router, prefix="/api/policy-tags")
 
 
 @app.get("/")
