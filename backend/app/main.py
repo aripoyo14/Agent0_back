@@ -1,8 +1,13 @@
 from fastapi import FastAPI
-from app.api.routes import user, auth, policy_proposal_comment, policy_proposal
+from app.api.routes import user, auth, policy_proposal_comment, policy_proposal, cosmos_summary
 import app.models
+from app.core.startup import init_external_services
 
 app = FastAPI()
+
+@app.on_event("startup")
+async def startup_event():
+    await init_external_services()
 
 """ ----------
  ルーター登録
@@ -23,6 +28,8 @@ app.include_router(policy_proposal.router, prefix="/api")
 
 # 政策案コメント関連API（投稿など）
 app.include_router(policy_proposal_comment.router, prefix="/api")
+# 面談録要約・政策タグAPI（Cosmos DB使用）
+app.include_router(cosmos_summary.router, prefix="/api")
 
 
 @app.get("/")

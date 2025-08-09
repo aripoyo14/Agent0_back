@@ -1,5 +1,6 @@
 from app.models.user import User  # まだ未作成でもOK
 from app.models.coach import Coach
+from app.models.policy_tag import PolicyTag
 ## from app.models.video import Video
 from sqlalchemy import Column, Integer, String, Date, Text, TIMESTAMP
 from .database import Base
