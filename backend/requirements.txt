@@ -17,8 +17,6 @@ requests
 openai==1.70.0
 
 # Vector Database
-pinecone==6.0.2
-
 # Azure Cosmos DB for MongoDB vCore
 pymongo==4.6.1
 

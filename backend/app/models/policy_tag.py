@@ -8,7 +8,7 @@ JST = timezone(timedelta(hours=9))
 class PolicyTag(Base):
     """
     - 政策タグ情報を格納するテーブル
-    - idとnameをベクトル化してPineconeに保存する
+    - idとnameをベクトル化してAzure Cosmos DBに保存する
     """
 
     __tablename__ = "policy_tags"

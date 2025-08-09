@@ -28,9 +28,6 @@ class Settings(BaseSettings):
 
     # 外部API
     openai_api_key: str = Field(default="your-openai-api-key-here", alias="OPENAI_API_KEY")
-    pinecone_api_key: str = Field(default="your-pinecone-api-key-here", alias="PINECONE_API_KEY")
-    pinecone_env: str = Field(default="your-pinecone-environment-here", alias="PINECONE_ENVIRONMENT")
-    pinecone_index: str = Field(default="your-pinecone-index-here", alias="PINECONE_INDEX")
 
     # Azure Cosmos DB for MongoDB vCore
     cosmos_connection_string: str = Field(default="", alias="COSMOS_CONNECTION_STRING")
