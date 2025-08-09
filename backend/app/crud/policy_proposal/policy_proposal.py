@@ -1,0 +1,89 @@
+# app/crud/policy_proposal/policy_proposal.py
+"""
+ - 政策案に関するDB操作（CRUDのうち作成・取得）を定義するモジュール。
+ - 主に SQLAlchemy を通じて PolicyProposal モデルとデータベースをやり取りする。
+"""
+
+from typing import Optional, List
+from sqlalchemy.orm import Session
+from fastapi import HTTPException, status
+from datetime import datetime, timezone, timedelta
+
+from app.models.policy_proposal.policy_proposal import PolicyProposal
+from app.schemas.policy_proposal.policy_proposal import ProposalCreate
+
+# 日本時間（JST）のタイムゾーンを定義
+JST = timezone(timedelta(hours=9))
+
+# 新規の政策案を登録する関数
+def create_proposal(db: Session, data: ProposalCreate) -> PolicyProposal:
+
+    # 1. タイトルの重複チェック
+    existing = db.query(PolicyProposal).filter(PolicyProposal.title == data.title).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="同じタイトルの政策案が既に存在します。"
+        )
+
+    # 2. PolicyProposalモデルのインスタンスを作成
+    proposal = PolicyProposal(
+        title=data.title,
+        body=data.body,
+        status=data.status,  # "draft" | "published" | "archived"
+        published_by_user_id=str(data.published_by_user_id),  # CHAR(36) なので文字列化
+        published_at=(datetime.now(JST) if data.status == "published" else None),
+        created_at=datetime.now(JST),
+        updated_at=datetime.now(JST),
+    )
+
+    # 3. DBに保存
+    db.add(proposal)
+    db.commit()
+    db.refresh(proposal)
+
+    # 4. 登録した政策案オブジェクトを返す
+    return proposal
+
+
+# def get_proposal(db: Session, proposal_id: str) -> Optional[PolicyProposal]:
+#     """
+#     主キー（UUID文字列）で政策案を1件取得する関数。
+#     見つからない場合は None を返す。
+#     """
+#     return db.query(PolicyProposal).filter(PolicyProposal.id == proposal_id).first()
+
+
+# def list_proposals(
+#     db: Session,
+#     *,
+#     status_filter: Optional[str] = None,  # "draft" | "published" | "archived"
+#     q: Optional[str] = None,              # タイトル/本文の部分一致
+#     offset: int = 0,
+#     limit: int = 20,
+# ) -> List[PolicyProposal]:
+#     """
+#     政策案の一覧を取得する関数（簡易検索付き）。
+#      - status でのフィルタ
+#      - タイトル/本文の部分一致検索
+#      - 新しい順（created_at DESC）
+#     """
+#     qs = db.query(PolicyProposal)
+
+#     if status_filter:
+#         qs = qs.filter(PolicyProposal.status == status_filter)
+
+#     if q:
+#         like = f"%{q}%"
+#         qs = qs.filter(
+#             (PolicyProposal.title.ilike(like)) |
+#             (PolicyProposal.body.ilike(like))
+#         )
+
+#     rows = (
+#         qs.order_by(PolicyProposal.created_at.desc())
+#           .offset(offset)
+#           .limit(limit)
+#           .all()
+#     )
+#     return rows
