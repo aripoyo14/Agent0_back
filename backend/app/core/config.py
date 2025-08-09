@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     pinecone_env: str = Field(default="your-pinecone-environment-here", alias="PINECONE_ENVIRONMENT")
     pinecone_index: str = Field(default="your-pinecone-index-here", alias="PINECONE_INDEX")
 
+    # Azure Cosmos DB for MongoDB vCore
+    cosmos_connection_string: str = Field(default="", alias="COSMOS_CONNECTION_STRING")
+    cosmos_database_name: str = Field(default="vector_db", alias="COSMOS_DATABASE_NAME")
+    cosmos_collection_name: str = Field(default="vectors", alias="COSMOS_COLLECTION_NAME")
+
     model_config = SettingsConfigDict(
         env_file=".env",  # プロジェクトルートにある.envファイルを指定
         extra="ignore"    # 不要な.env項目は無視

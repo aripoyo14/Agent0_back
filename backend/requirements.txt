@@ -19,6 +19,9 @@ openai==1.70.0
 # Vector Database
 pinecone==6.0.2
 
+# Azure Cosmos DB for MongoDB vCore
+pymongo==4.6.1
+
 # LangChain
 langchain==0.3.23  # LangChainメインパッケージ
 langchain-core==0.3.51  # LangChainコア機能
