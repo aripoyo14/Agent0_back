@@ -10,6 +10,7 @@ from app.schemas.policy_proposal_comment import PolicyProposalCommentCreate
 from uuid import uuid4
 from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException, status
+from typing import Optional, List #ライブラリのインポート_追加_ぴ_2025/08/10
 
 # 日本標準時（JST）
 JST = timezone(timedelta(hours=9))
@@ -56,3 +57,39 @@ def create_comment(db: Session, comment_in: PolicyProposalCommentCreate) -> Poli
 
     # 5. 登録済コメントを返却
     return comment
+
+def get_comment_by_id(db: Session, comment_id: str) -> Optional[PolicyProposalComment]:
+    """
+    コメントID（UUID文字列）で単一取得。論理削除は除外。
+    """
+    return (
+        db.query(PolicyProposalComment)
+        .filter(
+            PolicyProposalComment.id == comment_id,
+            PolicyProposalComment.is_deleted == False,
+        )
+        .first()
+    )
+
+def list_comments_by_policy_proposal_id(
+    db: Session,
+    policy_proposal_id: str,
+    *,
+    limit: int = 50,
+    offset: int = 0,
+) -> List[PolicyProposalComment]:
+    """
+    政策案ID（文字列）に紐づくコメント一覧を新しい順で取得。
+    論理削除は除外。簡易ページング対応。
+    """
+    return (
+        db.query(PolicyProposalComment)
+        .filter(
+            PolicyProposalComment.policy_proposal_id == policy_proposal_id,
+            PolicyProposalComment.is_deleted == False,
+        )
+        .order_by(PolicyProposalComment.posted_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
