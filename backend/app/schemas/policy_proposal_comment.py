@@ -1,6 +1,6 @@
 #  schemas/policy_proposal_comment.py
 from pydantic import BaseModel, Field
-from typing import Optional, Literal
+from typing import List, Optional, Literal
 from uuid import UUID
 from datetime import datetime
 
@@ -12,7 +12,7 @@ class PolicyProposalCommentCreate(BaseModel):
     comment_text: str
     parent_comment_id: Optional[UUID] = None
 
-# コメント取得時のレスポンススキーマ
+# 既存：単一コメント
 class PolicyProposalCommentResponse(BaseModel):
     id: UUID
     policy_proposal_id: UUID
@@ -28,3 +28,33 @@ class PolicyProposalCommentResponse(BaseModel):
         # Pydantic v2 で ORM 変換を許可
         "from_attributes": True
     }
+
+# 政策ごとに束ねる器（拡張メタ付き）
+class PolicyWithComments(BaseModel):
+    policy_proposal_id: UUID
+    title: Optional[str] = None
+    status: Optional[str] = None
+    published_at: Optional[datetime] = None
+
+    latest_commented_at: Optional[datetime] = None
+    total_comments: int
+
+    page: int = 1
+    page_size: int = 20
+    has_next: bool = False
+
+    comments: List[PolicyProposalCommentResponse]
+
+    model_config = {
+        "from_attributes": True
+    }
+
+# コメント一覧取得時のレスポンススキーマ
+class PolicyProposalCommentListResponse(BaseModel):
+    policy_proposal_id: UUID
+    title: Optional[str] = None
+    status: Optional[str] = None
+    published_at: Optional[datetime] = None
+
+    latest_commented_at: Optional[datetime] = None
+    total_comments: int

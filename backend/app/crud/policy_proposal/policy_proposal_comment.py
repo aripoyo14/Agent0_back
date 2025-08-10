@@ -5,12 +5,17 @@
 """
 
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app.models.policy_proposal.policy_proposal_comment import PolicyProposalComment
-from app.schemas.policy_proposal_comment import PolicyProposalCommentCreate
+from app.models.policy_proposal.policy_proposal import PolicyProposal
+from app.schemas.policy_proposal_comment import (
+    PolicyProposalCommentCreate,
+    PolicyWithComments
+)
 from uuid import uuid4
 from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException, status
-from typing import Optional, List #ライブラリのインポート_追加_ぴ_2025/08/10
+from typing import Optional, List
 
 # 日本標準時（JST）
 JST = timezone(timedelta(hours=9))
@@ -93,3 +98,63 @@ def list_comments_by_policy_proposal_id(
         .limit(limit)
         .all()
     )
+
+# 追加機能：指定ユーザーが投稿した政策案に紐づくコメント一覧を取得
+def list_comments_for_policies_by_user(
+    db: Session,
+    user_id: str,
+    *,
+    limit: int = 20,
+    offset: int = 0
+) -> List[PolicyWithComments]:
+    """
+    指定ユーザーが作成した政策案ごとに、
+    そこに投稿されたコメント一覧を返す。
+    """
+
+    # 1. ユーザーが作成した政策案を取得（ページングあり）
+    policies = (
+        db.query(PolicyProposal)
+        .filter(PolicyProposal.published_by_user_id == user_id)
+        .order_by(PolicyProposal.published_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    results: List[PolicyWithComments] = []
+
+    # 2. 各政策案に紐づくコメントを取得
+    for policy in policies:
+        comments = (
+            db.query(PolicyProposalComment)
+            .filter(
+                PolicyProposalComment.policy_proposal_id == str(policy.id),
+                PolicyProposalComment.is_deleted == False,
+            )
+            .order_by(PolicyProposalComment.posted_at.desc())
+            .all()
+        )
+
+        # 3. 最新コメント日時の取得
+        latest_commented_at = (
+            db.query(func.max(PolicyProposalComment.posted_at))
+            .filter(
+                PolicyProposalComment.policy_proposal_id == str(policy.id),
+                PolicyProposalComment.is_deleted == False,
+            )
+            .scalar()
+        )
+
+        # 4. スキーマ形式に変換して追加
+        results.append(PolicyWithComments(
+            policy_proposal_id=policy.id,
+            title=policy.title,
+            status=policy.status,
+            published_at=policy.published_at,
+            latest_commented_at=latest_commented_at,
+            total_comments=len(comments),
+            comments=comments
+        ))
+
+    return results
