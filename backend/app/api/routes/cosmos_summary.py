@@ -33,6 +33,15 @@ async def summary(request: SummaryRequest, db: Session = Depends(get_db)):
         tag_ids_list = cosmos_vector_service._parse_tag_ids(
             cosmos_vector_service._normalize_tag_ids(request.tag_ids)
         )
+
+        # ベクトルとタグの類似度を計算してMySQLに登録
+        if vector_result.get("success") and vector_result.get("vector"):
+            cosmos_vector_service.register_expert_tag_similarities(
+                db,
+                summary_vector=vector_result["vector"],
+                expert_id=request.expert_id,
+                tag_ids=tag_ids_list,
+            )
         
         # レスポンスを構築
         response = SummaryResponse(

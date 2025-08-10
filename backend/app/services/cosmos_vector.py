@@ -1,6 +1,6 @@
 import os
 import json
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List, Union, Tuple
 from datetime import datetime, timezone, timedelta
 from pymongo import MongoClient
 from pymongo.collection import Collection
@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.crud.policy_tag import policy_tag_crud
 from app.models.policy_tag import PolicyTag
+from app.crud.experts_policy_tags import experts_policy_tags_crud
+from app.models.experts_policy_tags import ExpertsPolicyTag
 
 # 日本標準時（JST）
 JST = timezone(timedelta(hours=9))
@@ -42,7 +44,7 @@ class CosmosVectorService:
         self, 
         summary_title: str, 
         summary_content: str, 
-        expert_id: int, 
+        expert_id: str, 
         tag_ids: Union[int, List[int], str],
         summary_id: str = None
     ) -> Dict[str, Any]:
@@ -80,7 +82,7 @@ class CosmosVectorService:
                 "summary_id": summary_id,
                 "title": summary_title,
                 "summary": summary_content,
-                "expert_id": expert_id,
+                    "expert_id": expert_id,
                 "tag_ids": tag_ids_str,  # カンマ区切りの文字列
                 "type": "summary",
                 "vector": embedding,
@@ -97,7 +99,8 @@ class CosmosVectorService:
                     "success": True,
                     "message": f"要約内容をベクトル化してCosmos DBに保存しました",
                     "summary_id": summary_id,
-                    "document_id": str(result.inserted_id)
+                    "document_id": str(result.inserted_id),
+                    "vector": embedding,
                 }
             else:
                 return {
@@ -110,6 +113,76 @@ class CosmosVectorService:
             return {
                 "success": False,
                 "message": f"ベクトル化処理中にエラーが発生しました: {str(e)}"
+            }
+
+    # ===== 追加: 類似度計算ユーティリティと登録処理 =====
+
+    @staticmethod
+    def _cosine_similarity(vector_a: List[float], vector_b: List[float]) -> float:
+        """コサイン類似度を計算"""
+        if not vector_a or not vector_b:
+            return 0.0
+        # 長さが異なる場合は安全側で短い方に合わせる
+        dim = min(len(vector_a), len(vector_b))
+        a = vector_a[:dim]
+        b = vector_b[:dim]
+        dot = sum(x * y for x, y in zip(a, b))
+        norm_a = sum(x * x for x in a) ** 0.5
+        norm_b = sum(y * y for y in b) ** 0.5
+        if norm_a == 0 or norm_b == 0:
+            return 0.0
+        return float(dot / (norm_a * norm_b))
+
+    def register_expert_tag_similarities(
+        self,
+        db: Session,
+        *,
+        summary_vector: List[float],
+        expert_id: str,
+        tag_ids: List[int],
+    ) -> Dict[str, Any]:
+        """
+        - 渡されたsummary_vectorと、MySQLのpolicy_tags.embedding（JSON）に入っているベクトルのコサイン類似度を計算
+        - 結果をexperts_policy_tagsに登録
+        """
+        try:
+            # 同一 expert × 指定タグ群 の既存レコードを削除
+            experts_policy_tags_crud.delete_by_expert_and_tags(db, expert_id=expert_id, tag_ids=tag_ids)
+
+            # タグを取得
+            policy_tags = policy_tag_crud.get_policy_tags_by_ids(db, tag_ids)
+            records: List[ExpertsPolicyTag] = []
+
+            for tag in policy_tags:
+                if not tag.embedding:
+                    # 埋め込み未生成はスキップ
+                    continue
+                try:
+                    payload = json.loads(tag.embedding)
+                    tag_vector = payload.get("vector")
+                    if not isinstance(tag_vector, list):
+                        continue
+                except Exception:
+                    continue
+
+                sim = self._cosine_similarity(summary_vector, tag_vector)
+                # DECIMAL(3,2)に丸める
+                relation_score = round(sim, 2)
+                record = ExpertsPolicyTag(expert_id=expert_id, policy_tag_id=tag.id, relation_score=relation_score)
+                records.append(record)
+
+            if records:
+                experts_policy_tags_crud.bulk_create(db, records)
+
+            return {
+                "success": True,
+                "inserted_count": len(records),
+            }
+        except Exception as e:
+            print(f"❌ 類似度登録エラー: {str(e)}")
+            return {
+                "success": False,
+                "message": f"類似度登録中にエラーが発生しました: {str(e)}",
             }
 
     def _normalize_tag_ids(self, tag_ids: Union[int, List[int], str]) -> str:
