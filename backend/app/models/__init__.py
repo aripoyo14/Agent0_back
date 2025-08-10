@@ -12,3 +12,6 @@ from .policy_proposal import PolicyProposal
 
 # 政策案コメント（投稿・返信など）
 from .policy_proposal.policy_proposal_comment import PolicyProposalComment
+
+# 政策案添付ファイル
+from .policy_proposal.policy_proposal_attachments import PolicyProposalAttachment

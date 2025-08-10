@@ -14,6 +14,29 @@ class ProposalCreate(BaseModel):
     published_by_user_id: UUID
     status: PolicyStatus = "draft"
 
+# 添付作成用スキーマ
+class AttachmentCreate(BaseModel):
+    file_name: str
+    file_type: str | None = None
+    file_size: int | None = None
+
+
+# 添付返却用スキーマ
+class AttachmentOut(BaseModel):
+    id: UUID
+    policy_proposal_id: UUID
+    file_name: str
+    file_url: str
+    file_type: str | None
+    file_size: int | None
+    uploaded_by_user_id: UUID | None
+    uploaded_at: datetime
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
 # レスポンス用スキーマ（表示用）
 class ProposalOut(BaseModel):
     id: UUID
@@ -24,6 +47,8 @@ class ProposalOut(BaseModel):
     published_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    # 添付一覧（省略可能）
+    attachments: list[AttachmentOut] | None = None
 
     model_config = {
         "from_attributes": True
