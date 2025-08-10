@@ -34,10 +34,10 @@ class CosmosVectorService:
         self.database: Database = self.client[self.database_name]
         self.collection: Collection = self.database[self.collection_name]
         
-        # Embeddingモデルの初期化
-        self.embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
+        # Embeddingモデルの初期化（最新の小型モデルに更新）
+        self.embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
         
-        # ベクトル次元数
+        # ベクトル次元数（text-embedding-3-small は 1536 次元）
         self.vector_dimension = 1536
 
     def vectorize_summary(
@@ -69,8 +69,8 @@ class CosmosVectorService:
             # tag_idsを正規化（カンマ区切りの文字列に変換）
             tag_ids_str = self._normalize_tag_ids(tag_ids)
             
-            # ベクトル化するテキストを作成
-            text_to_embed = f"Title: {summary_title}, Summary: {summary_content}, Expert ID: {expert_id}, Tag IDs: {tag_ids_str}"
+            # ベクトル化するテキストを作成（内容のみを対象にする）
+            text_to_embed = f"{summary_title}\n{summary_content}"
             
             # テキストをベクトル化
             print(f"🔍 要約内容をベクトル化中...")
@@ -401,8 +401,13 @@ class CosmosVectorService:
             documents_to_insert = []
 
             for tag in policy_tags:
-                # idとnameを組み合わせたテキストを作成
-                text = f"ID: {tag.id}, Name: {tag.name}"
+                # name + description + keywords を結合して表現力を強化
+                parts = [tag.name or ""]
+                if getattr(tag, "description", None):
+                    parts.append(str(tag.description))
+                if getattr(tag, "keywords", None):
+                    parts.append(str(tag.keywords))
+                text = "\n".join([p for p in parts if p])
                 texts_to_embed.append(text)
                 
                 # ドキュメントのベースを準備（vectorは後で追加）
@@ -491,8 +496,14 @@ class CosmosVectorService:
             # idとnameを組み合わせたテキストを作成
             text = f"ID: {policy_tag.id}, Name: {policy_tag.name}"
             
-            # テキストをベクトル化
+            # テキストをベクトル化（name + description + keywords）
             print(f"🔍 政策タグ (ID: {tag_id}) をベクトル化中...")
+            parts = [policy_tag.name or ""]
+            if getattr(policy_tag, "description", None):
+                parts.append(str(policy_tag.description))
+            if getattr(policy_tag, "keywords", None):
+                parts.append(str(policy_tag.keywords))
+            text = "\n".join([p for p in parts if p])
             embedding = self.embeddings.embed_query(text)
             
             # ドキュメントを準備
