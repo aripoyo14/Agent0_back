@@ -1,5 +1,4 @@
 from azure.storage.blob import BlobServiceClient
-from uuid import uuid4
 import os
 
 AZURE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
@@ -21,7 +20,7 @@ def get_container_client():
 blob_service_client = get_blob_service_client()
 container_client = get_container_client()
 
-def upload_video_to_blob(file, filename: str) -> str:
+def upload_binary_to_blob(file, filename: str) -> str:
     if container_client is None:
         # Azure接続が設定されていない場合は、ローカルファイルパスを返す
         return f"local://{filename}"
@@ -29,3 +28,7 @@ def upload_video_to_blob(file, filename: str) -> str:
     blob_client = container_client.get_blob_client(filename)
     blob_client.upload_blob(file, overwrite=True)
     return blob_client.url  # ←保存用URL
+
+def upload_video_to_blob(file, filename: str) -> str:
+    # 後方互換: 既存の動画アップロード呼び出しをサポート
+    return upload_binary_to_blob(file, filename)
