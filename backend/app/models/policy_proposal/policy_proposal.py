@@ -1,5 +1,6 @@
 # app/models/policy_proposal/policy_proposal.py
 from sqlalchemy import Column, String, Text, Enum, DateTime, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.mysql import CHAR
 from app.db.base_class import Base
 from datetime import datetime, timezone, timedelta
@@ -41,3 +42,10 @@ class PolicyProposal(Base):
     # 作成・更新日時（JST）
     created_at = Column(DateTime, default=lambda: datetime.now(JST))
     updated_at = Column(DateTime, default=lambda: datetime.now(JST), onupdate=lambda: datetime.now(JST))
+
+    # 添付ファイル（1対多）
+    attachments = relationship(
+        "PolicyProposalAttachment",
+        back_populates="proposal",
+        cascade="all, delete-orphan",
+    )

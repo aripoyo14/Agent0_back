@@ -11,6 +11,7 @@ from datetime import datetime, timezone, timedelta
 
 from app.models.policy_proposal.policy_proposal import PolicyProposal
 from app.schemas.policy_proposal.policy_proposal import ProposalCreate
+from app.models.policy_proposal.policy_proposal_attachments import PolicyProposalAttachment
 
 # 日本時間（JST）のタイムゾーンを定義
 JST = timezone(timedelta(hours=9))
@@ -44,6 +45,44 @@ def create_proposal(db: Session, data: ProposalCreate) -> PolicyProposal:
 
     # 4. 登録した政策案オブジェクトを返す
     return proposal
+
+
+def create_attachment(
+    db: Session,
+    *,
+    policy_proposal_id: str,
+    file_name: str,
+    file_url: str,
+    file_type: str | None,
+    file_size: int | None,
+    uploaded_by_user_id: str | None,
+) -> PolicyProposalAttachment:
+    attachment = PolicyProposalAttachment(
+        policy_proposal_id=policy_proposal_id,
+        file_name=file_name,
+        file_url=file_url,
+        file_type=file_type,
+        file_size=file_size,
+        uploaded_by_user_id=uploaded_by_user_id,
+    )
+    db.add(attachment)
+    db.commit()
+    db.refresh(attachment)
+    return attachment
+
+
+def list_attachments_by_policy_proposal_id(
+    db: Session,
+    *,
+    policy_proposal_id: str,
+) -> list[PolicyProposalAttachment]:
+    """指定した政策案に紐づく添付一覧を返す。"""
+    rows = (
+        db.query(PolicyProposalAttachment)
+        .filter(PolicyProposalAttachment.policy_proposal_id == policy_proposal_id)
+        .all()
+    )
+    return rows
 
 
 # def get_proposal(db: Session, proposal_id: str) -> Optional[PolicyProposal]:
