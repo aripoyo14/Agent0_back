@@ -1,6 +1,6 @@
 import os
 import json
-from typing import Dict, Any, List, Union, Tuple
+from typing import Dict, Any, List, Union, Tuple, Optional
 from datetime import datetime, timezone, timedelta
 from pymongo import MongoClient
 from pymongo.collection import Collection
@@ -40,24 +40,27 @@ class CosmosVectorService:
         # ベクトル次元数（text-embedding-3-small は 1536 次元）
         self.vector_dimension = 1536
 
-    def vectorize_summary(
+    def vectorize_minutes(
         self, 
         summary_title: str, 
         summary_content: str, 
         expert_id: str, 
         tag_ids: Union[int, List[int], str],
-        summary_id: str = None
+        summary_id: str = None,
+        raw_minutes: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        要約内容をベクトル化してCosmos DBに保存する
-        
+        面談録(minutes)を優先してベクトル化し、Cosmos DBに保存する
+        （minutesが未指定の場合は title+summary を埋め込みに利用）
+
         Args:
-            summary_title: 要約のタイトル
-            summary_content: 要約の内容
+            summary_title: タイトル
+            summary_content: 要約本文
             expert_id: エキスパートID
             tag_ids: タグID（単一のint、リスト、またはカンマ区切りの文字列）
-            summary_id: 要約ID（指定されない場合は自動生成）
-            
+            summary_id: 保存用ID（指定されない場合は自動生成）
+            raw_minutes: 面談録（minutes）本文
+
         Returns:
             Dict[str, Any]: 処理結果の詳細
         """
@@ -69,11 +72,12 @@ class CosmosVectorService:
             # tag_idsを正規化（カンマ区切りの文字列に変換）
             tag_ids_str = self._normalize_tag_ids(tag_ids)
             
-            # ベクトル化するテキストを作成（内容のみを対象にする）
-            text_to_embed = f"{summary_title}\n{summary_content}"
+            # ベクトル化するテキストを作成（minutesが渡されていれば優先して使用）
+            use_minutes = raw_minutes is not None and len(raw_minutes) > 0
+            text_to_embed = raw_minutes if use_minutes else f"{summary_title}\n{summary_content}"
             
             # テキストをベクトル化
-            print(f"🔍 要約内容をベクトル化中...")
+            print("🔍 面談録(minutes)をベクトル化中..." if use_minutes else "🔍 要約内容をベクトル化中...")
             embedding = self.embeddings.embed_query(text_to_embed)
             
             # ドキュメントを準備
@@ -91,16 +95,17 @@ class CosmosVectorService:
             }
             
             # Cosmos DBにドキュメントを保存
-            print(f"💾 Cosmos DBに要約ベクトルを保存中...")
+            print("💾 Cosmos DBに面談録(minutes)のベクトルを保存中..." if use_minutes else "💾 Cosmos DBに要約ベクトルを保存中...")
             result = self.collection.insert_one(document)
             
             if result.inserted_id:
                 return {
                     "success": True,
-                    "message": f"要約内容をベクトル化してCosmos DBに保存しました",
+                    "message": ("面談録(minutes)をベクトル化してCosmos DBに保存しました" if use_minutes else "要約内容をベクトル化してCosmos DBに保存しました"),
                     "summary_id": summary_id,
                     "document_id": str(result.inserted_id),
                     "vector": embedding,
+                    "embedding_source": ("minutes" if use_minutes else "summary"),
                 }
             else:
                 return {
@@ -109,7 +114,7 @@ class CosmosVectorService:
                 }
 
         except Exception as e:
-            print(f"❌ 要約ベクトル化エラー: {str(e)}")
+            print(f"❌ ベクトル化エラー: {str(e)}")
             return {
                 "success": False,
                 "message": f"ベクトル化処理中にエラーが発生しました: {str(e)}"
@@ -146,12 +151,9 @@ class CosmosVectorService:
         - 結果をexperts_policy_tagsに登録
         """
         try:
-            # 同一 expert × 指定タグ群 の既存レコードを削除
-            experts_policy_tags_crud.delete_by_expert_and_tags(db, expert_id=expert_id, tag_ids=tag_ids)
-
             # タグを取得
             policy_tags = policy_tag_crud.get_policy_tags_by_ids(db, tag_ids)
-            records: List[ExpertsPolicyTag] = []
+            tag_scores: Dict[int, float] = {}
 
             for tag in policy_tags:
                 if not tag.embedding:
@@ -166,17 +168,20 @@ class CosmosVectorService:
                     continue
 
                 sim = self._cosine_similarity(summary_vector, tag_vector)
-                # DECIMAL(3,2)に丸める
-                relation_score = round(sim, 2)
-                record = ExpertsPolicyTag(expert_id=expert_id, policy_tag_id=tag.id, relation_score=relation_score)
-                records.append(record)
+                tag_scores[tag.id] = float(sim)
 
-            if records:
-                experts_policy_tags_crud.bulk_create(db, records)
+            # α: 更新感度（半減期を5回更新で50%とする場合の目安 α≈0.13）
+            alpha = 0.13
+            inserted = experts_policy_tags_crud.upsert_ewma(
+                db,
+                expert_id=expert_id,
+                tag_scores=tag_scores,
+                alpha=alpha,
+            )
 
             return {
                 "success": True,
-                "inserted_count": len(records),
+                "inserted_count": inserted,
             }
         except Exception as e:
             print(f"❌ 類似度登録エラー: {str(e)}")
@@ -227,7 +232,7 @@ class CosmosVectorService:
         tag_ids: Union[int, List[int], str] = None
     ) -> List[Dict[str, Any]]:
         """
-        クエリに類似した要約を検索する
+        クエリに類似した面談録ベクトルを検索する
         
         Args:
             query (str): 検索クエリ
@@ -236,7 +241,7 @@ class CosmosVectorService:
             tag_ids (Union[int, List[int], str], optional): 特定のタグで絞り込み
             
         Returns:
-            List[Dict[str, Any]]: 類似した要約のリスト
+            List[Dict[str, Any]]: 類似したベクトルのリスト
         """
         try:
             # クエリをベクトル化
@@ -291,15 +296,15 @@ class CosmosVectorService:
             return similar_summaries
 
         except Exception as e:
-            print(f"❌ 要約検索エラー: {str(e)}")
+            print(f"❌ 検索エラー: {str(e)}")
             return []
 
     def delete_summary_vector(self, summary_id: str) -> Dict[str, Any]:
         """
-        指定された要約IDのベクトルを削除する
+        指定されたIDのベクトルを削除する
         
         Args:
-            summary_id: 削除する要約のID
+            summary_id: 削除するID
             
         Returns:
             Dict[str, Any]: 処理結果の詳細
@@ -311,17 +316,17 @@ class CosmosVectorService:
             if result.deleted_count > 0:
                 return {
                     "success": True,
-                    "message": f"要約ベクトル (ID: {summary_id}) を削除しました",
+                    "message": f"ベクトル (ID: {summary_id}) を削除しました",
                     "summary_id": summary_id
                 }
             else:
                 return {
                     "success": False,
-                    "message": f"要約ベクトル (ID: {summary_id}) が見つかりませんでした"
+                    "message": f"ベクトル (ID: {summary_id}) が見つかりませんでした"
                 }
 
         except Exception as e:
-            print(f"❌ 要約ベクトル削除エラー: {str(e)}")
+            print(f"❌ ベクトル削除エラー: {str(e)}")
             return {
                 "success": False,
                 "message": f"ベクトル削除中にエラーが発生しました: {str(e)}"
@@ -338,7 +343,7 @@ class CosmosVectorService:
             # 総ドキュメント数を取得
             total_count = self.collection.count_documents({})
             
-            # 要約タイプのドキュメント数を取得
+            # 面談録（summaryタイプを含む）ドキュメント数を取得
             summary_count = self.collection.count_documents({"type": "summary"})
             
             # エキスパート別の統計を取得

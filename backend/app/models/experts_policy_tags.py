@@ -11,8 +11,7 @@ JST = timezone(timedelta(hours=9))
 
 class ExpertsPolicyTag(Base):
     """
-    エキスパートと政策タグの類似度を保持するテーブル。
-    - 1レコードは1回の要約（summary_id）に対するエキスパート×タグのコサイン類似度
+    エキスパートと政策タグの関連度（EWMA）を保持するテーブル。
     """
 
     __tablename__ = "experts_policy_tags"
