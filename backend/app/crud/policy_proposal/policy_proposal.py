@@ -71,6 +71,20 @@ def create_attachment(
     return attachment
 
 
+def list_attachments_by_policy_proposal_id(
+    db: Session,
+    *,
+    policy_proposal_id: str,
+) -> list[PolicyProposalAttachment]:
+    """指定した政策案に紐づく添付一覧を返す。"""
+    rows = (
+        db.query(PolicyProposalAttachment)
+        .filter(PolicyProposalAttachment.policy_proposal_id == policy_proposal_id)
+        .all()
+    )
+    return rows
+
+
 # def get_proposal(db: Session, proposal_id: str) -> Optional[PolicyProposal]:
 #     """
 #     主キー（UUID文字列）で政策案を1件取得する関数。

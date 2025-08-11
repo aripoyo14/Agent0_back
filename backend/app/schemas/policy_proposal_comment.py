@@ -29,6 +29,19 @@ class PolicyProposalCommentResponse(BaseModel):
         "from_attributes": True
     }
 
+# 返信投稿用スキーマ（親コメントIDはパスパラメータで受け取るため本体には含めない）
+class PolicyProposalReplyCreate(BaseModel):
+    author_type: Literal["admin", "staff", "contributor", "viewer"]
+    author_id: UUID
+    comment_text: str
+
+# AI 返信リクエスト
+class AIReplyRequest(BaseModel):
+    author_type: Literal["admin", "staff", "contributor", "viewer"]
+    author_id: UUID
+    persona: Optional[str] = "丁寧で建設的な政策担当者"
+    instruction: Optional[str] = None
+
 # 政策ごとに束ねる器（拡張メタ付き）
 class PolicyWithComments(BaseModel):
     policy_proposal_id: UUID
