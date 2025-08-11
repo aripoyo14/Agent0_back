@@ -1,6 +1,6 @@
 import os
 import json
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List, Union, Tuple, Optional
 from datetime import datetime, timezone, timedelta
 from pymongo import MongoClient
 from pymongo.collection import Collection
@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.crud.policy_tag import policy_tag_crud
 from app.models.policy_tag import PolicyTag
+from app.crud.experts_policy_tags import experts_policy_tags_crud
+from app.models.experts_policy_tags import ExpertsPolicyTag
 
 # 日本標準時（JST）
 JST = timezone(timedelta(hours=9))
@@ -32,30 +34,33 @@ class CosmosVectorService:
         self.database: Database = self.client[self.database_name]
         self.collection: Collection = self.database[self.collection_name]
         
-        # Embeddingモデルの初期化
-        self.embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
+        # Embeddingモデルの初期化（最新の小型モデルに更新）
+        self.embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
         
-        # ベクトル次元数
+        # ベクトル次元数（text-embedding-3-small は 1536 次元）
         self.vector_dimension = 1536
 
-    def vectorize_summary(
+    def vectorize_minutes(
         self, 
         summary_title: str, 
         summary_content: str, 
-        expert_id: int, 
+        expert_id: str, 
         tag_ids: Union[int, List[int], str],
-        summary_id: str = None
+        summary_id: str = None,
+        raw_minutes: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        要約内容をベクトル化してCosmos DBに保存する
-        
+        面談録(minutes)を優先してベクトル化し、Cosmos DBに保存する
+        （minutesが未指定の場合は title+summary を埋め込みに利用）
+
         Args:
-            summary_title: 要約のタイトル
-            summary_content: 要約の内容
+            summary_title: タイトル
+            summary_content: 要約本文
             expert_id: エキスパートID
             tag_ids: タグID（単一のint、リスト、またはカンマ区切りの文字列）
-            summary_id: 要約ID（指定されない場合は自動生成）
-            
+            summary_id: 保存用ID（指定されない場合は自動生成）
+            raw_minutes: 面談録（minutes）本文
+
         Returns:
             Dict[str, Any]: 処理結果の詳細
         """
@@ -67,11 +72,12 @@ class CosmosVectorService:
             # tag_idsを正規化（カンマ区切りの文字列に変換）
             tag_ids_str = self._normalize_tag_ids(tag_ids)
             
-            # ベクトル化するテキストを作成
-            text_to_embed = f"Title: {summary_title}, Summary: {summary_content}, Expert ID: {expert_id}, Tag IDs: {tag_ids_str}"
+            # ベクトル化するテキストを作成（minutesが渡されていれば優先して使用）
+            use_minutes = raw_minutes is not None and len(raw_minutes) > 0
+            text_to_embed = raw_minutes if use_minutes else f"{summary_title}\n{summary_content}"
             
             # テキストをベクトル化
-            print(f"🔍 要約内容をベクトル化中...")
+            print("🔍 面談録(minutes)をベクトル化中..." if use_minutes else "🔍 要約内容をベクトル化中...")
             embedding = self.embeddings.embed_query(text_to_embed)
             
             # ドキュメントを準備
@@ -80,7 +86,7 @@ class CosmosVectorService:
                 "summary_id": summary_id,
                 "title": summary_title,
                 "summary": summary_content,
-                "expert_id": expert_id,
+                    "expert_id": expert_id,
                 "tag_ids": tag_ids_str,  # カンマ区切りの文字列
                 "type": "summary",
                 "vector": embedding,
@@ -89,15 +95,17 @@ class CosmosVectorService:
             }
             
             # Cosmos DBにドキュメントを保存
-            print(f"💾 Cosmos DBに要約ベクトルを保存中...")
+            print("💾 Cosmos DBに面談録(minutes)のベクトルを保存中..." if use_minutes else "💾 Cosmos DBに要約ベクトルを保存中...")
             result = self.collection.insert_one(document)
             
             if result.inserted_id:
                 return {
                     "success": True,
-                    "message": f"要約内容をベクトル化してCosmos DBに保存しました",
+                    "message": ("面談録(minutes)をベクトル化してCosmos DBに保存しました" if use_minutes else "要約内容をベクトル化してCosmos DBに保存しました"),
                     "summary_id": summary_id,
-                    "document_id": str(result.inserted_id)
+                    "document_id": str(result.inserted_id),
+                    "vector": embedding,
+                    "embedding_source": ("minutes" if use_minutes else "summary"),
                 }
             else:
                 return {
@@ -106,10 +114,80 @@ class CosmosVectorService:
                 }
 
         except Exception as e:
-            print(f"❌ 要約ベクトル化エラー: {str(e)}")
+            print(f"❌ ベクトル化エラー: {str(e)}")
             return {
                 "success": False,
                 "message": f"ベクトル化処理中にエラーが発生しました: {str(e)}"
+            }
+
+    # ===== 追加: 類似度計算ユーティリティと登録処理 =====
+
+    @staticmethod
+    def _cosine_similarity(vector_a: List[float], vector_b: List[float]) -> float:
+        """コサイン類似度を計算"""
+        if not vector_a or not vector_b:
+            return 0.0
+        # 長さが異なる場合は安全側で短い方に合わせる
+        dim = min(len(vector_a), len(vector_b))
+        a = vector_a[:dim]
+        b = vector_b[:dim]
+        dot = sum(x * y for x, y in zip(a, b))
+        norm_a = sum(x * x for x in a) ** 0.5
+        norm_b = sum(y * y for y in b) ** 0.5
+        if norm_a == 0 or norm_b == 0:
+            return 0.0
+        return float(dot / (norm_a * norm_b))
+
+    def register_expert_tag_similarities(
+        self,
+        db: Session,
+        *,
+        summary_vector: List[float],
+        expert_id: str,
+        tag_ids: List[int],
+    ) -> Dict[str, Any]:
+        """
+        - 渡されたsummary_vectorと、MySQLのpolicy_tags.embedding（JSON）に入っているベクトルのコサイン類似度を計算
+        - 結果をexperts_policy_tagsに登録
+        """
+        try:
+            # タグを取得
+            policy_tags = policy_tag_crud.get_policy_tags_by_ids(db, tag_ids)
+            tag_scores: Dict[int, float] = {}
+
+            for tag in policy_tags:
+                if not tag.embedding:
+                    # 埋め込み未生成はスキップ
+                    continue
+                try:
+                    payload = json.loads(tag.embedding)
+                    tag_vector = payload.get("vector")
+                    if not isinstance(tag_vector, list):
+                        continue
+                except Exception:
+                    continue
+
+                sim = self._cosine_similarity(summary_vector, tag_vector)
+                tag_scores[tag.id] = float(sim)
+
+            # α: 更新感度（半減期を5回更新で50%とする場合の目安 α≈0.13）
+            alpha = 0.13
+            inserted = experts_policy_tags_crud.upsert_ewma(
+                db,
+                expert_id=expert_id,
+                tag_scores=tag_scores,
+                alpha=alpha,
+            )
+
+            return {
+                "success": True,
+                "inserted_count": inserted,
+            }
+        except Exception as e:
+            print(f"❌ 類似度登録エラー: {str(e)}")
+            return {
+                "success": False,
+                "message": f"類似度登録中にエラーが発生しました: {str(e)}",
             }
 
     def _normalize_tag_ids(self, tag_ids: Union[int, List[int], str]) -> str:
@@ -154,7 +232,7 @@ class CosmosVectorService:
         tag_ids: Union[int, List[int], str] = None
     ) -> List[Dict[str, Any]]:
         """
-        クエリに類似した要約を検索する
+        クエリに類似した面談録ベクトルを検索する
         
         Args:
             query (str): 検索クエリ
@@ -163,7 +241,7 @@ class CosmosVectorService:
             tag_ids (Union[int, List[int], str], optional): 特定のタグで絞り込み
             
         Returns:
-            List[Dict[str, Any]]: 類似した要約のリスト
+            List[Dict[str, Any]]: 類似したベクトルのリスト
         """
         try:
             # クエリをベクトル化
@@ -218,15 +296,15 @@ class CosmosVectorService:
             return similar_summaries
 
         except Exception as e:
-            print(f"❌ 要約検索エラー: {str(e)}")
+            print(f"❌ 検索エラー: {str(e)}")
             return []
 
     def delete_summary_vector(self, summary_id: str) -> Dict[str, Any]:
         """
-        指定された要約IDのベクトルを削除する
+        指定されたIDのベクトルを削除する
         
         Args:
-            summary_id: 削除する要約のID
+            summary_id: 削除するID
             
         Returns:
             Dict[str, Any]: 処理結果の詳細
@@ -238,17 +316,17 @@ class CosmosVectorService:
             if result.deleted_count > 0:
                 return {
                     "success": True,
-                    "message": f"要約ベクトル (ID: {summary_id}) を削除しました",
+                    "message": f"ベクトル (ID: {summary_id}) を削除しました",
                     "summary_id": summary_id
                 }
             else:
                 return {
                     "success": False,
-                    "message": f"要約ベクトル (ID: {summary_id}) が見つかりませんでした"
+                    "message": f"ベクトル (ID: {summary_id}) が見つかりませんでした"
                 }
 
         except Exception as e:
-            print(f"❌ 要約ベクトル削除エラー: {str(e)}")
+            print(f"❌ ベクトル削除エラー: {str(e)}")
             return {
                 "success": False,
                 "message": f"ベクトル削除中にエラーが発生しました: {str(e)}"
@@ -265,7 +343,7 @@ class CosmosVectorService:
             # 総ドキュメント数を取得
             total_count = self.collection.count_documents({})
             
-            # 要約タイプのドキュメント数を取得
+            # 面談録（summaryタイプを含む）ドキュメント数を取得
             summary_count = self.collection.count_documents({"type": "summary"})
             
             # エキスパート別の統計を取得
@@ -328,8 +406,13 @@ class CosmosVectorService:
             documents_to_insert = []
 
             for tag in policy_tags:
-                # idとnameを組み合わせたテキストを作成
-                text = f"ID: {tag.id}, Name: {tag.name}"
+                # name + description + keywords を結合して表現力を強化
+                parts = [tag.name or ""]
+                if getattr(tag, "description", None):
+                    parts.append(str(tag.description))
+                if getattr(tag, "keywords", None):
+                    parts.append(str(tag.keywords))
+                text = "\n".join([p for p in parts if p])
                 texts_to_embed.append(text)
                 
                 # ドキュメントのベースを準備（vectorは後で追加）
@@ -418,8 +501,14 @@ class CosmosVectorService:
             # idとnameを組み合わせたテキストを作成
             text = f"ID: {policy_tag.id}, Name: {policy_tag.name}"
             
-            # テキストをベクトル化
+            # テキストをベクトル化（name + description + keywords）
             print(f"🔍 政策タグ (ID: {tag_id}) をベクトル化中...")
+            parts = [policy_tag.name or ""]
+            if getattr(policy_tag, "description", None):
+                parts.append(str(policy_tag.description))
+            if getattr(policy_tag, "keywords", None):
+                parts.append(str(policy_tag.keywords))
+            text = "\n".join([p for p in parts if p])
             embedding = self.embeddings.embed_query(text)
             
             # ドキュメントを準備
