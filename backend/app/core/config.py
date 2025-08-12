@@ -28,6 +28,10 @@ class Settings(BaseSettings):
 
     # 外部API
     openai_api_key: str = Field(default="your-openai-api-key-here", alias="OPENAI_API_KEY")
+    # Google Programmable Search (Custom Search JSON API)
+    google_cse_api_key: str = Field(default="", alias="GOOGLE_CSE_API_KEY")
+    google_cse_cx: str = Field(default="", alias="GOOGLE_CSE_CX")
+    google_cse_endpoint: str = Field(default="https://www.googleapis.com/customsearch/v1", alias="GOOGLE_CSE_ENDPOINT")
 
     # Azure Cosmos DB for MongoDB vCore
     cosmos_connection_string: str = Field(default="", alias="COSMOS_CONNECTION_STRING")
