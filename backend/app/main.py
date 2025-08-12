@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.api.routes import user, auth, policy_proposal_comment, policy_proposal, cosmos_minutes
+from app.api.routes import user, auth, policy_proposal_comment, policy_proposal, cosmos_minutes, outreach
 import app.models
 from app.core.startup import init_external_services
 
@@ -31,6 +31,9 @@ app.include_router(policy_proposal_comment.router, prefix="/api")
 
 # 面談録要約・政策タグAPI（Cosmos DB使用）
 app.include_router(cosmos_minutes.router, prefix="/api")
+
+# 外部発信情報取得API（Outreach）
+app.include_router(outreach.router, prefix="/api")
 
 
 @app.get("/")

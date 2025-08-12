@@ -6,6 +6,9 @@
 
 # ユーザーモデル（経産省職員など）
 from .user import User
+from .company import Company
+from .expert import Expert
+from .expert_activity import ExpertActivity
 
 # 政策案本体（タイトル・本文・ステータスなど）
 from .policy_proposal import PolicyProposal
