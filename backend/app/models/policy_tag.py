@@ -20,6 +20,10 @@ class PolicyTag(Base):
     # タグ名（50文字以内）ユニーク制約
     name = Column(String(50), nullable=False, unique=True)
 
+    # 説明・キーワード（任意）
+    description = Column(Text, nullable=True)
+    keywords = Column(Text, nullable=True)
+
     # ベクトル値（1536次元の埋め込みをJSON文字列化して保存）
     # ※ MySQLにpgvector相当の拡張がなければTEXTでOK
     embedding = Column(Text, nullable=True, comment="JSON文字列形式の埋め込みベクトル")

@@ -1,6 +1,6 @@
 # app/api/routes/cosmos_summary.py
 """
- - Azure Cosmos DBを使用した面談録の要約
+ - Azure Cosmos DBを使用した面談録（minutes）ベクトル化・検索
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -13,26 +13,36 @@ from app.services.openai import generate_summary
 from app.services.cosmos_vector import cosmos_vector_service
 
 # FastAPIのルーターを初期化
-router = APIRouter(prefix="/cosmos-summary", tags=["Cosmos Summary"])
+router = APIRouter(prefix="/cosmos-minutes", tags=["Cosmos Minutes"])
 
-@router.post("/summary")
-async def summary(request: SummaryRequest, db: Session = Depends(get_db)):
+@router.post("/minutes", summary="Vectorize Minutes", description="面談録（minutes）をベクトル化し、Cosmos DBに保存。関連度も更新")
+async def minutes(request: SummaryRequest, db: Session = Depends(get_db)):
     try:
-        # 要約を生成
+        # 要約を生成（レスポンス表示用）。埋め込みはminutesを優先
         summary_result = generate_summary(request.minutes)
         
-        # 要約内容をベクトル化してCosmos DBに保存
-        vector_result = cosmos_vector_service.vectorize_summary(
+        # 面談録（minutes）を優先してベクトル化してCosmos DBに保存
+        vector_result = cosmos_vector_service.vectorize_minutes(
             summary_title=summary_result["title"],
             summary_content=summary_result["summary"],
             expert_id=request.expert_id,
-            tag_ids=request.tag_ids
+            tag_ids=request.tag_ids,
+            raw_minutes=request.minutes,
         )
         
         # tag_idsを整数リストに変換
         tag_ids_list = cosmos_vector_service._parse_tag_ids(
             cosmos_vector_service._normalize_tag_ids(request.tag_ids)
         )
+
+        # ベクトルとタグの類似度を計算してMySQLに登録
+        if vector_result.get("success") and vector_result.get("vector"):
+            cosmos_vector_service.register_expert_tag_similarities(
+                db,
+                summary_vector=vector_result["vector"],
+                expert_id=request.expert_id,
+                tag_ids=tag_ids_list,
+            )
         
         # レスポンスを構築
         response = SummaryResponse(
@@ -49,18 +59,18 @@ async def summary(request: SummaryRequest, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"要約処理中にエラーが発生しました: {str(e)}"
+            detail=f"ベクトル化処理中にエラーが発生しました: {str(e)}"
         )
 
-@router.get("/search")
-async def search_summaries(
+@router.get("/search", summary="Search Minutes", description="面談録（minutes）ベクトルの類似検索")
+async def search_minutes(
     query: str = Query(..., description="検索クエリ"),
     top_k: int = Query(5, description="返す結果の数"),
     expert_id: Optional[int] = Query(None, description="特定のエキスパートで絞り込み"),
     tag_ids: Optional[str] = Query(None, description="特定のタグで絞り込み（カンマ区切り）")
 ):
     """
-    Cosmos DBを使用した要約内容の類似検索を行う
+    Cosmos DBを使用した面談録ベクトルの類似検索を行う
     """
     try:
         results = cosmos_vector_service.search_similar_summaries(
@@ -84,13 +94,13 @@ async def search_summaries(
             detail=f"検索処理中にエラーが発生しました: {str(e)}"
         )
 
-@router.delete("/vector/{summary_id}")
-async def delete_summary_vector(summary_id: str):
+@router.delete("/vector/{minutes_id}", summary="Delete Minutes Vector", description="指定IDのベクトルをCosmos DBから削除")
+async def delete_minutes_vector(minutes_id: str):
     """
-    指定された要約IDのベクトルをCosmos DBから削除する
+    指定されたIDのベクトルをCosmos DBから削除する
     """
     try:
-        result = cosmos_vector_service.delete_summary_vector(summary_id)
+        result = cosmos_vector_service.delete_summary_vector(minutes_id)
         
         if result["success"]:
             return {
