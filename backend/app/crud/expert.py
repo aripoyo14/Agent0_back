@@ -1,3 +1,4 @@
+from __future__ import annotations
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from uuid import uuid4
@@ -22,8 +23,9 @@ def get_expert_by_name_and_company(db: Session, last_name: str, first_name: str,
 
 def create_expert(db: Session, expert_in: ExpertCreate, password_hash: str) -> Expert:
     """
-     - 外部有識者を新規作成する。(アイデアソンでの新規ユーザー登録時を想定)
-     - 会社名はcompaniesテーブルからidを取得。存在しなければ新規作成
+    外部有識者を新規作成する。(アイデアソンでの新規ユーザー登録時を想定)
+    会社名はcompaniesテーブルからidを取得
+    会社名が存在しなければ、新規作成してidを取得
     """
 
     company = get_or_create_company_by_name(db, expert_in.company_name)
@@ -44,4 +46,6 @@ def create_expert(db: Session, expert_in: ExpertCreate, password_hash: str) -> E
     db.refresh(expert)
     return expert
 
-
+# メールアドレスでexpertを検索する関数
+def get_expert_by_email(db: Session, email: str):
+    return db.query(Expert).filter(Expert.email == email).first()

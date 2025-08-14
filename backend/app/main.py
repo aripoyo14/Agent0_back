@@ -42,12 +42,8 @@ app.include_router(policy_proposal.router, prefix="/api")
 
 # 政策案コメント関連API（投稿など）
 app.include_router(policy_proposal_comment.router, prefix="/api")
-
 # 面談録要約・政策タグAPI（Cosmos DB使用）
-app.include_router(cosmos_minutes.router, prefix="/api")
-
-# 外部発信情報取得API（Outreach）
-app.include_router(outreach.router, prefix="/api")
+# app.include_router(cosmos_minutes.router, prefix="/api")
 
 # 外部有識者関連API
 app.include_router(expert.router, prefix="/api")
