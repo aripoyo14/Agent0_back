@@ -12,6 +12,7 @@ from app.crud.policy_tag import policy_tag_crud
 from app.models.policy_tag import PolicyTag
 from app.crud.experts_policy_tags import experts_policy_tags_crud
 from app.models.experts_policy_tags import ExpertsPolicyTag
+from app.models.expert import Expert
 
 # 日本標準時（JST）
 JST = timezone(timedelta(hours=9))
@@ -298,6 +299,75 @@ class CosmosVectorService:
         except Exception as e:
             print(f"❌ 検索エラー: {str(e)}")
             return []
+
+    def compute_cosine_similarities_for_text(
+        self,
+        text: str,
+        *,
+        limit: int = 50,
+        min_similarity: float = 0.0,
+    ) -> List[Dict[str, Any]]:
+        """
+        入力テキストを埋め込み、Cosmos DB に保存済みの面談録ベクトルに対し
+        コサイン類似度で上位を返す（Mongo の $search が使えない場合のフォールバック）。
+        """
+        try:
+            query_embedding = self.embeddings.embed_query(text)
+            # 全件取得（注意: ドキュメント数が多い場合は $search を使う search_similar_summaries を推奨）
+            docs = list(self.collection.find({"type": "summary"}, {"_id": 0, "summary_id": 1, "title": 1, "summary": 1, "expert_id": 1, "vector": 1}))
+            scored: List[Dict[str, Any]] = []
+            for doc in docs:
+                vector = doc.get("vector")
+                if not isinstance(vector, list):
+                    continue
+                sim = self._cosine_similarity(query_embedding, vector)
+                if sim < min_similarity:
+                    continue
+                scored.append({
+                    "summary_id": doc.get("summary_id"),
+                    "title": doc.get("title"),
+                    "summary": doc.get("summary"),
+                    "expert_id": doc.get("expert_id"),
+                    "similarity": sim,
+                })
+            scored.sort(key=lambda x: x["similarity"], reverse=True)
+            return scored[:limit]
+        except Exception as e:
+            print(f"❌ 類似度計算エラー: {str(e)}")
+            return []
+
+    def build_user_meeting_results(
+        self,
+        db: Session,
+        *,
+        scored_docs: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        類似度の高い面談録に紐づくユーザー情報を付与して返す。
+        """
+        if not scored_docs:
+            return []
+        # Expert テーブルで名前を解決（Cosmos 側は expert_id を保持しているため）
+        expert_ids = list({d.get("expert_id") for d in scored_docs if d.get("expert_id")})
+        experts = []
+        if expert_ids:
+            experts = db.query(Expert).filter(Expert.id.in_(expert_ids)).all()
+        id_to_expert = {e.id: e for e in experts}
+
+        results: List[Dict[str, Any]] = []
+        for d in scored_docs:
+            uid = d.get("expert_id")
+            user_name = None
+            if uid in id_to_expert:
+                ex = id_to_expert[uid]
+                user_name = f"{ex.last_name}{ex.first_name}"
+            results.append({
+                "user_id": uid or "",
+                "user_name": user_name or "",
+                "similarity": float(d.get("similarity", d.get("score", 0.0))),
+                "meeting_summary": d.get("summary"),
+            })
+        return results
 
     def delete_summary_vector(self, summary_id: str) -> Dict[str, Any]:
         """

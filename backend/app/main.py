@@ -1,10 +1,6 @@
 from fastapi import FastAPI
-<<<<<<< HEAD
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import user, auth, policy_proposal_comment, policy_proposal, cosmos_summary, expert
-=======
-from app.api.routes import user, auth, policy_proposal_comment, policy_proposal, cosmos_minutes, outreach
->>>>>>> 67a68b0c9a05eb878fb7d3003455b13818397e09
+from app.api.routes import user, auth, policy_proposal_comment, policy_proposal, cosmos_minutes, outreach, expert, search_network_map
 import app.models
 from app.core.startup import init_external_services
 
@@ -55,6 +51,9 @@ app.include_router(outreach.router, prefix="/api")
 
 # 外部有識者関連API
 app.include_router(expert.router, prefix="/api")
+
+# ネットワークマップ検索API
+app.include_router(search_network_map.router, prefix="/api")
 
 
 @app.get("/")
