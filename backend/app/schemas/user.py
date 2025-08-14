@@ -27,6 +27,8 @@ class UserOut(BaseModel):
     last_login_at: Optional[datetime]
     created_at: datetime
     updated_at: datetime
+    mfa_enabled: Optional[bool] = False
+    # mfa_totp_secret と mfa_backup_codes はセキュリティ上、レスポンスには含めない
 
     model_config = {
         # Pydantic v2 で ORM 変換を許可
@@ -43,3 +45,15 @@ class UserLoginRequest(BaseModel):
 class UserLoginResponse(BaseModel):
     access_token: str
     user: UserOut
+
+
+# MFA設定用スキーマ
+class MFAEnableRequest(BaseModel):
+    totp_secret: str
+    backup_codes: list[str]
+
+class MFAVerifyRequest(BaseModel):
+    totp_code: str
+
+class MFABackupCodeRequest(BaseModel):
+    backup_code: str
