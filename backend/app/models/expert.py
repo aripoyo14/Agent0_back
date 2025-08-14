@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 from __future__ import annotations
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import Column, String, Boolean, DateTime, Integer, Text, Date, Enum, Numeric
