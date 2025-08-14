@@ -14,6 +14,8 @@ from app.schemas.policy_proposal_comment import (
     PolicyWithComments,
     PolicyProposalReplyCreate,
     AIReplyRequest,
+    CommentRatingCreate,
+    CommentRatingResponse,
 )
 from app.crud.policy_proposal.policy_proposal_comment import (
     create_comment,
@@ -21,6 +23,7 @@ from app.crud.policy_proposal.policy_proposal_comment import (
     list_comments_by_policy_proposal_id,
     list_comments_for_policies_by_user,
     create_reply,
+    update_comment_rating,
 )
 from app.services.openai import generate_ai_reply
 from app.services.file_analyzer import extract_file_content
@@ -302,6 +305,65 @@ def generate_reply_suggestion(
 
     # 生成した文案をそのまま返す（保存はしない）
     return {"suggested_reply": ai_text}
+
+
+""" ------------------------
+  評価関連エンドポイント
+------------------------ """
+
+# コメントの評価を更新
+@router.put("/{comment_id}/rating", response_model=CommentRatingResponse)
+def update_rating(
+    comment_id: str,
+    rating_in: CommentRatingCreate,
+    db: Session = Depends(get_db),
+):
+    """
+    コメントの評価を更新する。
+    
+    ## 機能
+    - 既存のコメントに評価（evaluation/stance）を追加・更新
+    - 評価のみの操作（コメント本文は変更しない）
+    
+    ## パラメータ
+    - `comment_id`: 評価対象のコメントUUID
+    
+    ## リクエストボディ
+    ```json
+    {
+      "evaluation": 4,  // 純粋な評価（1-5：悪い-良い）
+      "stance": 3       // スタンス（1-5：否定的-肯定的）
+    }
+    ```
+    
+    ## 制約
+    - evaluation: 1-5の範囲
+    - stance: 1-5の範囲
+    - 両方ともNULL可（部分更新対応）
+    
+    ## レスポンス
+    - 成功時: 更新された評価情報
+    - コメントが見つからない場合: 404 Not Found
+    - 評価値が範囲外の場合: 400 Bad Request
+    
+    ## 使用例
+    ```
+    PUT /api/policy-proposal-comments/7803bd7d-dc24-4730-adf9-f3e0d5c7c18a/rating
+    ```
+    """
+    updated_comment = update_comment_rating(
+        db,
+        comment_id=comment_id,
+        evaluation=rating_in.evaluation,
+        stance=rating_in.stance,
+    )
+    
+    return CommentRatingResponse(
+        id=updated_comment.id,
+        evaluation=updated_comment.evaluation,
+        stance=updated_comment.stance,
+        updated_at=updated_comment.posted_at  # 一時的にposted_atを使用（DBマイグレーション後はupdated_atに変更）
+    )
 
 
 # ファイル解析比較テスト用エンドポイント

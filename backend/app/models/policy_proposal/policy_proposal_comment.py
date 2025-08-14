@@ -43,9 +43,32 @@ class PolicyProposalComment(Base):
 
     # 投稿日時（JST）
     posted_at = Column(DateTime, default=lambda: datetime.now(JST))
+    
+    # 更新日時（JST） - 一時的にコメントアウト（DBマイグレーション後有効化）
+    # updated_at = Column(DateTime, default=lambda: datetime.now(JST), onupdate=lambda: datetime.now(JST))
 
     # いいね数（初期値0）
     like_count = Column(Integer, default=0)
 
     # ソフトデリート（論理削除）
     is_deleted = Column(Boolean, default=False)
+    
+    # 評価関連（NULL可）
+    evaluation = Column(Integer, nullable=True)  # 純粋な評価（1-5：悪い-良い）
+    stance = Column(Integer, nullable=True)      # スタンス（1-5：否定的-肯定的）
+    
+    # 評価制約
+    __table_args__ = (
+        CheckConstraint(
+            "author_type IN ('admin', 'staff', 'contributor', 'viewer')",
+            name="check_author_type"
+        ),
+        CheckConstraint(
+            "evaluation IS NULL OR (evaluation >= 1 AND evaluation <= 5)",
+            name="check_evaluation_range"
+        ),
+        CheckConstraint(
+            "stance IS NULL OR (stance >= 1 AND stance <= 5)",
+            name="check_stance_range"
+        ),
+    )
