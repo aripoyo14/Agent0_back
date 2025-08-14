@@ -23,6 +23,7 @@ __all__ = [
     "User",
     "Expert",
     "Company",
+    "ExpertActivity",
     "PolicyProposal",
     "PolicyProposalComment",
     "PolicyProposalAttachment",

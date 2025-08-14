@@ -1,12 +1,11 @@
 from __future__ import annotations
-
-from typing import Optional
-from uuid import uuid4
-
 from sqlalchemy.orm import Session
+from fastapi import HTTPException, status
+from uuid import uuid4
+from typing import Optional
 
-from app.models.company import Company
 from app.models.expert import Expert
+from app.models.company import Company
 from app.schemas.expert import ExpertCreate
 from app.crud.company import get_or_create_company_by_name
 
@@ -28,8 +27,7 @@ def create_expert(db: Session, expert_in: ExpertCreate, password_hash: str) -> E
     会社名はcompaniesテーブルからidを取得
     会社名が存在しなければ、新規作成してidを取得
     """
-    
-    # 会社名から company を解決。存在しなければ新規作成
+
     company = get_or_create_company_by_name(db, expert_in.company_name)
 
     expert = Expert(

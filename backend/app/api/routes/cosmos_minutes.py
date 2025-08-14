@@ -230,6 +230,9 @@ async def search_policy_tags(
             detail=f"政策タグ検索中にエラーが発生しました: {str(e)}"
         )
 
+
+# マッチングAPIは search_network_map へ移設
+
 @router.delete("/policy-tags/vector/{tag_id}")
 async def delete_policy_tag_vector(tag_id: int):
     """

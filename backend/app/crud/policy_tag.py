@@ -13,6 +13,10 @@ class PolicyTagCRUD:
         """IDで政策タグを取得"""
         return db.query(PolicyTag).filter(PolicyTag.id == tag_id).first()
 
+    def get_policy_tag_by_name(self, db: Session, name: str) -> Optional[PolicyTag]:
+        """名前で政策タグを取得（完全一致）"""
+        return db.query(PolicyTag).filter(PolicyTag.name == name).first()
+
     def get_policy_tags_by_ids(self, db: Session, tag_ids: List[int]) -> List[PolicyTag]:
         """複数のIDで政策タグを取得"""
         return db.query(PolicyTag).filter(PolicyTag.id.in_(tag_ids)).all()
