@@ -32,3 +32,14 @@ class UserOut(BaseModel):
         # Pydantic v2 で ORM 変換を許可
         "from_attributes": True
     }
+
+
+# ユーザーログイン用スキーマ（POST /login で使う）
+class UserLoginRequest(BaseModel):
+    email: str
+    password: str
+
+# ユーザーログイン用スキーマ（POST /login で使う）
+class UserLoginResponse(BaseModel):
+    access_token: str
+    user: UserOut

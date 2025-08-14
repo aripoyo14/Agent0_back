@@ -29,3 +29,7 @@ def verify_access_token(token: str) -> dict | None:
         return payload
     except JWTError:
         return None
+
+# JWTトークンをデコードしてペイロードを返す関数 (verify_access_tokenのエイリアスとして使用)
+def decode_access_token(token: str) -> dict | None:
+    return verify_access_token(token)

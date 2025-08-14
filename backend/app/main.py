@@ -1,10 +1,6 @@
 from fastapi import FastAPI
-<<<<<<< HEAD
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import user, auth, policy_proposal_comment, policy_proposal, cosmos_summary, expert
-=======
-from app.api.routes import user, auth, policy_proposal_comment, policy_proposal, cosmos_minutes, outreach
->>>>>>> 67a68b0c9a05eb878fb7d3003455b13818397e09
+from app.api.routes import user, auth, policy_proposal_comment, policy_proposal, cosmos_minutes, expert
 import app.models
 from app.core.startup import init_external_services
 
@@ -46,12 +42,8 @@ app.include_router(policy_proposal.router, prefix="/api")
 
 # 政策案コメント関連API（投稿など）
 app.include_router(policy_proposal_comment.router, prefix="/api")
-
 # 面談録要約・政策タグAPI（Cosmos DB使用）
-app.include_router(cosmos_minutes.router, prefix="/api")
-
-# 外部発信情報取得API（Outreach）
-app.include_router(outreach.router, prefix="/api")
+# app.include_router(cosmos_minutes.router, prefix="/api")
 
 # 外部有識者関連API
 app.include_router(expert.router, prefix="/api")

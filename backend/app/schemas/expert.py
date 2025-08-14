@@ -28,3 +28,15 @@ class ExpertOut(BaseModel):
     }
 
 
+# Expertログイン用スキーマ
+class ExpertLoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class ExpertLoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expert: ExpertOut
+
+
