@@ -7,7 +7,8 @@ from app.schemas.outreach import OutreachRequest, OutreachResponse
 from app.services.outreach import find_outreach, find_outreach_with_debug
 from urllib.parse import urlparse
 from app.db.session import get_db
-from app.crud.expert import get_company_by_name, get_expert_by_name_and_company
+from app.crud.company import get_company_by_name
+from app.crud.expert import get_expert_by_name_and_company
 from app.crud.expert_activity import bulk_upsert_expert_activities
 
 

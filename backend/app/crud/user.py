@@ -64,11 +64,6 @@ def create_user(db: Session, user_in: UserCreate, password_hash: str) -> User:
     # 4. 登録したユーザーオブジェクトを返す
     return user
 
-# def get_by_email(db: Session, email: str) -> Optional[User]:
-#     return db.query(User).filter(User.email == email).first()
-
-# def get_by_email_and_verify_password(db: Session, email: str, password: str):
-#     user = get_by_email(db, email=email)
-#     if user and verify_password(password, user.password_hash):
-#         return user
-#     return None
+# メールアドレスでユーザーを検索する関数
+def get_user_by_email(db: Session, email: str):
+    return db.query(User).filter(User.email == email).first()
