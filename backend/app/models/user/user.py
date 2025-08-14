@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, DateTime, Enum
+from sqlalchemy import Column, String, Boolean, DateTime, Enum, Text
 from sqlalchemy.dialects.mysql import CHAR
 from datetime import datetime, timezone, timedelta
 from app.db.base_class import Base
@@ -51,3 +51,12 @@ class User(Base):
 
     # レコード更新日時（更新時に自動更新 / JST）
     updated_at = Column(DateTime, default=lambda: datetime.now(JST), onupdate=lambda: datetime.now(JST))
+
+    # MFAを有効化済みか
+    mfa_enabled = Column(Boolean, default=False)
+    
+    # TOTPの秘密鍵（暗号化）
+    mfa_totp_secret = Column(String(255), nullable=True)
+    
+    # バックアップコード群
+    mfa_backup_codes = Column(Text, nullable=True)
