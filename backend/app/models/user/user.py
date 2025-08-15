@@ -1,5 +1,6 @@
 from sqlalchemy import Column, String, Boolean, DateTime, Enum, Text
 from sqlalchemy.dialects.mysql import CHAR
+from sqlalchemy.orm import relationship
 from datetime import datetime, timezone, timedelta
 from app.db.base_class import Base
 import uuid
@@ -60,3 +61,7 @@ class User(Base):
     
     # バックアップコード群
     mfa_backup_codes = Column(Text, nullable=True)
+
+    # リレーション
+    organized_meetings = relationship("Meeting", back_populates="organizer")
+    meeting_participations = relationship("MeetingUser", back_populates="user")

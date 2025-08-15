@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     cosmos_database_name: str = Field(default="vector_db", alias="COSMOS_DATABASE_NAME")
     cosmos_collection_name: str = Field(default="vectors", alias="COSMOS_COLLECTION_NAME")
 
+    # Azure Blob Storage
+    azure_storage_connection_string: str = Field(default="", alias="AZURE_STORAGE_CONNECTION_STRING")
+    azure_blob_container: str = Field(default="default-container", alias="AZURE_BLOB_CONTAINER")
+    azure_meeting_container: str = Field(default="meetings-minutes", alias="AZURE_MEETING_CONTAINER")
+
     model_config = SettingsConfigDict(
         env_file=".env",  # プロジェクトルートにある.envファイルを指定
         extra="ignore"    # 不要な.env項目は無視
