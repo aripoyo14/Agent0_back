@@ -13,6 +13,7 @@ from app.core.security import hash_password, verify_password
 from app.core.jwt import create_access_token
 from fastapi.security import HTTPBearer
 from app.db.session import SessionLocal
+from app.services.qr_code import QRCodeService
 
 
 # FastAPIのルーターを初期化
@@ -101,3 +102,15 @@ def get_user_profile(token: str = Depends(HTTPBearer()), db: Session = Depends(g
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="認証に失敗しました。"
         )
+
+# QRコード生成エンドポイント
+@router.get("/users/{user_id}/profile-qr")
+def generate_profile_qr(user_id: str):
+    """ユーザープロフィール用のQRコードを生成"""
+    profile_url = f"https://agent0.com/profile/{user_id}"
+    qr_code = QRCodeService.generate_custom_qr(
+        data=profile_url,
+        box_size=8,
+        border=3
+    )
+    return {"qr_code": qr_code, "profile_url": profile_url}

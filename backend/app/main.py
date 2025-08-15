@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import user, auth, policy_proposal_comment, policy_proposal, cosmos_minutes, outreach, expert, search_network_map
+from app.api.routes import user, auth, policy_proposal_comment, policy_proposal, cosmos_minutes, outreach, expert, search_network_map, mfa
 import app.models
 from app.core.startup import init_external_services
 
@@ -50,6 +50,9 @@ app.include_router(expert.router, prefix="/api")
 
 # ネットワークマップ検索API
 app.include_router(search_network_map.router, prefix="/api")
+
+# MFA関連API
+app.include_router(mfa.router, prefix="/api")
 
 
 @app.get("/")

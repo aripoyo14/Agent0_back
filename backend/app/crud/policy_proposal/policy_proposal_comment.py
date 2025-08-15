@@ -52,7 +52,9 @@ def create_comment(db: Session, comment_in: PolicyProposalCommentCreate) -> Poli
         parent_comment_id=str(comment_in.parent_comment_id) if comment_in.parent_comment_id else None,
         posted_at=datetime.now(JST),
         like_count=0,
-        is_deleted=False
+        is_deleted=False,
+        evaluation=comment_in.evaluation,
+        stance=comment_in.stance
     )
 
     # 4. DBに保存
@@ -99,6 +101,8 @@ def create_reply(
         posted_at=datetime.now(JST),
         like_count=0,
         is_deleted=False,
+        evaluation=None,  # 返信には評価は含めない
+        stance=None
     )
 
     db.add(reply)
@@ -201,3 +205,45 @@ def list_comments_for_policies_by_user(
         ))
 
     return results
+
+
+def update_comment_rating(
+    db: Session,
+    comment_id: str,
+    evaluation: Optional[int] = None,
+    stance: Optional[int] = None,
+) -> Optional[PolicyProposalComment]:
+    """
+    コメントの評価を更新する。
+    評価値の範囲チェックも行う。
+    """
+    # 評価値の範囲チェック
+    if evaluation is not None and (evaluation < 1 or evaluation > 5):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="evaluation は 1-5 の範囲で指定してください。"
+        )
+    
+    if stance is not None and (stance < 1 or stance > 5):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="stance は 1-5 の範囲で指定してください。"
+        )
+    
+    # コメントの存在確認
+    comment = get_comment_by_id(db, comment_id)
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    
+    # 評価を更新
+    if evaluation is not None:
+        comment.evaluation = evaluation
+    if stance is not None:
+        comment.stance = stance
+    
+    # 更新日時を設定 - 一時的にコメントアウト（DBマイグレーション後有効化）
+    # comment.updated_at = datetime.now(JST)
+    
+    db.commit()
+    db.refresh(comment)
+    return comment
