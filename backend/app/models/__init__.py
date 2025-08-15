@@ -19,6 +19,9 @@ from .policy_proposal.policy_proposal_comment import PolicyProposalComment
 # 政策案添付ファイル
 from .policy_proposal.policy_proposal_attachments import PolicyProposalAttachment
 
+# 面談関連モデル
+from .meeting import Meeting, MeetingUser, MeetingExpert
+
 __all__ = [
     "User",
     "Expert",
@@ -27,4 +30,7 @@ __all__ = [
     "PolicyProposal",
     "PolicyProposalComment",
     "PolicyProposalAttachment",
+    "Meeting",
+    "MeetingUser",
+    "MeetingExpert",
 ]
