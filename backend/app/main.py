@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import user, auth, policy_proposal_comment, policy_proposal, cosmos_minutes, outreach, expert, search_network_map, mfa, meeting
-import app.models
+from app.api.routes import user, auth, policy_proposal_comment, policy_proposal, cosmos_minutes, outreach, expert, search_network_map, meeting
 from app.core.startup import init_external_services
+from app.core.security.mfa import mfa_router
 
 app = FastAPI()
 
@@ -52,7 +52,7 @@ app.include_router(expert.router, prefix="/api")
 app.include_router(search_network_map.router, prefix="/api")
 
 # MFA関連API
-app.include_router(mfa.router, prefix="/api")
+app.include_router(mfa_router, prefix="/api")
 
 # 面談関連API
 app.include_router(meeting.router, prefix="/api")

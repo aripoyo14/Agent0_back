@@ -1,3 +1,7 @@
+"""
+MFA APIルーター
+"""
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.schemas.mfa import (
@@ -9,8 +13,8 @@ from app.crud.mfa import (
     get_mfa_status, verify_mfa_totp, verify_mfa_backup_code
 )
 from app.db.session import get_db
-from app.models.user import User 
-from app.services.qr_code import QRCodeService
+from app.models.user import User
+from .service import MFAService
 
 router = APIRouter(prefix="/mfa", tags=["MFA"])
 
@@ -57,26 +61,21 @@ def verify_backup_code_endpoint(
     """バックアップコードを検証"""
     return verify_mfa_backup_code(db, user_id, mfa_data.backup_code)
 
-# 以下のエンドポイントを追加
 @router.post("/generate-secret")
 def generate_totp_secret():
     """TOTP秘密鍵を生成（テスト用）"""
-    import pyotp
-    secret = pyotp.random_base32()
+    secret = MFAService.generate_totp_secret()
     return {"secret": secret}
 
 @router.post("/generate-backup-codes")
 def generate_backup_codes():
     """バックアップコードを生成（テスト用）"""
-    import secrets
-    backup_codes = [secrets.token_hex(4).upper() for _ in range(10)]
+    backup_codes = MFAService.generate_backup_codes()
     return {"backup_codes": backup_codes}
 
-# QRコード生成エンドポイント
 @router.get("/generate-qr/{user_id}")
 def generate_qr_code(user_id: str, db: Session = Depends(get_db)):
     """TOTP用のQRコードを生成"""
-    # ユーザーのTOTP秘密鍵を取得
     user = db.query(User).filter(User.id == user_id).first()
     if not user or not user.mfa_enabled:
         raise HTTPException(
@@ -85,13 +84,11 @@ def generate_qr_code(user_id: str, db: Session = Depends(get_db)):
         )
     
     try:
-        # QRコードサービスを使用
-        qr_data = QRCodeService.generate_totp_qr(
+        qr_data = MFAService.generate_qr_code(
             secret=user.mfa_totp_secret,
             email=user.email,
             issuer="Agent0"
         )
-        
         return qr_data
         
     except Exception as e:

@@ -1,7 +1,8 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional, Literal
 from datetime import datetime
 from uuid import UUID
+
 
 # ユーザー登録用スキーマ（POST /register で使う）
 class UserCreate(BaseModel):
@@ -57,3 +58,14 @@ class MFAVerifyRequest(BaseModel):
 
 class MFABackupCodeRequest(BaseModel):
     backup_code: str
+
+# ユーザーロール変更用スキーマ（PUT /{user_id}/role で使う）
+class RoleUpdateRequest(BaseModel):
+    role: str  # "admin", "staff" のみ
+    
+    @field_validator('role')
+    @classmethod
+    def validate_role(cls, v: str) -> str:
+        if v not in ['admin', 'staff']:
+            raise ValueError('無効なロールです。adminまたはstaffのみ許可されます')
+        return v
