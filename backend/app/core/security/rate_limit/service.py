@@ -44,13 +44,21 @@ class RateLimitService:
             # プロキシ経由の場合の対応
             forwarded_for = request.headers.get("x-forwarded-for")
             if forwarded_for:
-                return forwarded_for.split(",")[0].strip()
+                # ポート番号を除去してIPアドレスのみを取得
+                ip_with_port = forwarded_for.split(",")[0].strip()
+                return ip_with_port.split(":")[0]  # ポート番号を除去
             
             real_ip = request.headers.get("x-real-ip")
             if real_ip:
-                return real_ip
+                # ポート番号を除去してIPアドレスのみを取得
+                return real_ip.split(":")[0]
             
-            return request.client.host if request.client else "unknown"
+            # request.client.hostからポート番号を除去
+            if request.client:
+                client_host = request.client.host
+                return client_host.split(":")[0]  # ポート番号を除去
+            
+            return "unknown"
         except Exception:
             return "unknown"
     
