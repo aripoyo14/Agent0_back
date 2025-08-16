@@ -58,7 +58,7 @@ def login_expert(request: ExpertLoginRequest, db: Session = Depends(get_db)):
     token = create_access_token({
         "sub": str(expert.id),
         "role": expert.role,
-        "type": "expert"
+        "user_type": "expert"
     })
 
     # トークンとexpert情報をレスポンスとして返す
