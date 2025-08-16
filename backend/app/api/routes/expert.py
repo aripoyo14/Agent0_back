@@ -1,13 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from app.schemas.expert import ExpertCreate, ExpertOut, ExpertLoginRequest, ExpertLoginResponse
+from app.schemas.expert import ExpertCreate, ExpertOut, ExpertLoginRequest, ExpertLoginResponse, ExpertInsightsOut
 from app.crud.expert import create_expert
 from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.core.security.jwt import create_access_token, decode_access_token
 from fastapi.security import HTTPBearer
 from app.models.expert import Expert
-from app.crud.expert import get_expert_by_email
+from app.crud.expert import get_expert_by_email, get_expert_insights
 from app.core.security import verify_password
 
 
@@ -97,3 +97,17 @@ def get_expert_profile(token: str = Depends(HTTPBearer()), db: Session = Depends
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="認証に失敗しました。"
         )
+
+
+# エキスパートの活動インサイト取得
+@router.get("/{expert_id}/insights", response_model=ExpertInsightsOut)
+def get_insights(expert_id: str, db: Session = Depends(get_db)):
+    try:
+        data = get_expert_insights(db, expert_id)
+        if not data:
+            raise HTTPException(status_code=404, detail="対象の外部有識者データが見つかりません")
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"インサイト取得中にエラー: {str(e)}")
