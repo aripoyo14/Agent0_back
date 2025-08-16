@@ -56,8 +56,25 @@ class RateLimitConfig(BaseModel):
     
     class Config:
         """Pydantic設定"""
-        env_prefix = "RATE_LIMIT_"
+        # env_prefix = "RATE_LIMIT_"  # この行を削除またはコメントアウト
         case_sensitive = False
 
 # デフォルト設定インスタンス
-default_config = RateLimitConfig()
+# デフォルト設定インスタンス
+default_config = RateLimitConfig(
+    enabled=True,
+    auth_login_max_requests=3,
+    auth_login_window_seconds=60,
+    user_register_max_requests=3,
+    user_register_window_seconds=3600,
+    file_upload_max_requests=10,
+    file_upload_window_seconds=60,
+    comment_post_max_requests=20,
+    comment_post_window_seconds=60,
+    read_api_max_requests=100,
+    read_api_window_seconds=60,
+    global_ip_max_requests=1000,
+    global_ip_window_seconds=3600,
+    log_violations=True,
+    block_violations=True
+)
