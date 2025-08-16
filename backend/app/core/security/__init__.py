@@ -17,6 +17,13 @@ from .rbac import RBACService, require_user_permissions, require_expert_permissi
 # 監査ログ関連の機能をエクスポート
 from .audit import AuditService, AuditEventType, audit_log, audit_log_sync
 
+# レート制限関連の機能をエクスポート
+from .rate_limit import (
+    rate_limit, rate_limit_ip, rate_limit_endpoint, rate_limit_user,
+    rate_limit_auth_login, rate_limit_user_register, rate_limit_file_upload,
+    rate_limit_comment_post, rate_limit_read_api
+)
+
 __all__ = [
     "hash_password",
     "verify_password",
@@ -31,5 +38,14 @@ __all__ = [
     "AuditService",
     "AuditEventType",
     "audit_log",
-    "audit_log_sync"
+    "audit_log_sync",
+    "rate_limit",
+    "rate_limit_ip",
+    "rate_limit_endpoint",
+    "rate_limit_user",
+    "rate_limit_auth_login",
+    "rate_limit_user_register",
+    "rate_limit_file_upload",
+    "rate_limit_comment_post",
+    "rate_limit_read_api"
 ]

@@ -14,12 +14,22 @@ from app.core.security.audit import AuditService, AuditEventType
 from app.db.session import get_db
 from app.models.user import User
 from app.models.expert import Expert
+from app.core.security.rate_limit.dependencies import check_auth_login_rate_limit
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 # User/ExpertログインAPI (ユーザー認証を行い、アクセストークン（JWT）を発行して返す)
 @router.post("/login", response_model=TokenResponse)
-def login_user(http_request: Request, request: LoginRequest, db: Session = Depends(get_db)):
+def login_user(
+    http_request: Request, 
+    request: LoginRequest, 
+    db: Session = Depends(get_db),
+    rate_limit_check: bool = Depends(check_auth_login_rate_limit)  # レート制限チェック
+):
+    
+    # デバッグログを追加
+    print(" ログイン関数が呼び出されました")
+    print(f"🔍 リクエストIP: {http_request.client.host if http_request.client else 'unknown'}")
 
     # 監査サービスの初期化
     audit_service = AuditService(db)
