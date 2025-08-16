@@ -13,7 +13,7 @@ from app.core.security.rbac.service import RBACService
 from app.core.security.mfa import MFAService
 from app.core.security.rate_limit.dependencies import check_user_register_rate_limit
 from app.crud.user import create_user, get_user_by_email
-from app.models.user import User
+from app.models.user import User, Department, Position
 from app.db.session import get_db
 from app.services.qr_code import QRCodeService
 from fastapi.security import HTTPBearer
@@ -41,16 +41,23 @@ def register_user(
     audit_service = AuditService(db)
     
     try:
-        # 1. 基本ユーザー作成
-        user = create_user(db, user_data)
+        # 1. パスワードをハッシュ化
+        password_hash = hash_password(user_data.password)
         
         # 2. MFA設定用の秘密鍵・バックアップコード生成
         totp_secret = MFAService.generate_totp_secret()
         backup_codes = MFAService.generate_backup_codes()
         
-        # 3. MFA設定前のアカウント制限（一時的な制限）
+        # 3. 基本ユーザー作成（パスワードハッシュを渡す）
+        user = create_user(db, user_data, password_hash)
+        
+        # 4. MFA関連フィールドを設定
+        user.mfa_totp_secret = totp_secret
+        user.mfa_backup_codes = backup_codes
         user.mfa_required = True
         user.account_active = False  # MFA設定完了まで無効
+
+        # 5. すべての変更をコミット
         db.commit()
         
         # 4. 成功時の監査ログ
@@ -173,6 +180,33 @@ def generate_profile_qr(user_id: str):
         border=3
     )
     return {"qr_code": qr_code, "profile_url": profile_url}
+
+# 部署一覧取得エンドポイント
+@router.get("/departments", response_model=List[dict])
+def get_departments(db: Session = Depends(get_db)):
+    """利用可能な部署一覧を取得"""
+    departments = db.query(Department).filter(Department.is_active == True).all()
+    return [
+        {
+            "id": dept.id,
+            "name": dept.name,
+            "section": dept.section
+        }
+        for dept in departments
+    ]
+
+# 役職一覧取得エンドポイント
+@router.get("/positions", response_model=List[dict])
+def get_positions(db: Session = Depends(get_db)):
+    """利用可能な役職一覧を取得"""
+    positions = db.query(Position).filter(Position.is_active == True).all()
+    return [
+        {
+            "id": pos.id,
+            "name": pos.name
+        }
+        for pos in positions
+    ]
 
 # ユーザーロール変更エンドポイント
 @router.put("/{user_id}/role", response_model=UserOut)

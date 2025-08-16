@@ -40,7 +40,7 @@ def create_user(db: Session, user_in: UserCreate, password_hash: str) -> User:
 
     # 3. ユーザー情報をDBに保存
     db.add(user)
-    db.flush()  # user.id を得るため
+    db.flush()  # user.id を得るため（コミットはしない）
 
     # 4. 部署との中間テーブルに登録
     db.execute(
@@ -57,11 +57,10 @@ def create_user(db: Session, user_in: UserCreate, password_hash: str) -> User:
             position_id=user_in.position_id
         )
     )
-
-    db.commit()
-    db.refresh(user)    # 保存後の情報（例：自動で付与された値）を再取得
-
-    # 4. 登録したユーザーオブジェクトを返す
+    
+    # db.commit() を削除（外側でコミットする）
+    db.refresh(user)
+    
     return user
 
 # メールアドレスでユーザーを検索する関数
