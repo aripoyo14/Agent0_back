@@ -49,3 +49,46 @@ class ExpertRoleUpdateRequest(BaseModel):
         if v not in ['contributor', 'viewer']:
             raise ValueError('無効なロールです。contributorまたはviewerのみ許可されます')
         return v
+
+
+# ========== Insights / Overview DTOs ==========
+
+class MeetingParticipantDepartmentOut(BaseModel):
+    department_name: str | None = None
+    department_section: str | None = None
+
+
+class MeetingParticipantOut(BaseModel):
+    user_id: str
+    last_name: str
+    first_name: str
+    department: MeetingParticipantDepartmentOut | None = None
+
+
+class MeetingOverviewOut(BaseModel):
+    meeting_id: str
+    meeting_date: date
+    title: str
+    summary: str | None = None
+    minutes_url: str | None = None
+    evaluation: int | None = None
+    stance: int | None = None
+    participants: list[MeetingParticipantOut] = []
+
+
+class PolicyProposalCommentOut(BaseModel):
+    policy_proposal_id: str
+    policy_title: str
+    comment_text: str
+    posted_at: datetime
+    like_count: int
+    evaluation: int | None = None
+    stance: int | None = None
+
+
+class ExpertInsightsOut(BaseModel):
+    expert_id: str
+    meetings: list[MeetingOverviewOut]
+    policy_comments: list[PolicyProposalCommentOut]
+    evaluation_average: float | None = None  # 小数第1位
+    stance_average: int | None = None       # 四捨五入の整数
