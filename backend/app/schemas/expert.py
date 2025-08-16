@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from typing import Optional, Literal
+from typing import Optional, Literal, List
 from datetime import date, datetime
 from uuid import UUID
 
@@ -92,3 +92,14 @@ class ExpertInsightsOut(BaseModel):
     policy_comments: list[PolicyProposalCommentOut]
     evaluation_average: float | None = None  # 小数第1位
     stance_average: int | None = None       # 四捨五入の整数
+
+
+# 既存のスキーマに追加
+class ExpertRegisterResponse(BaseModel):
+    message: str
+    user_id: str
+    mfa_setup_required: bool
+    totp_secret: str
+    backup_codes: List[str]
+    qr_code_url: str
+    next_step: str

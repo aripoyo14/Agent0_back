@@ -8,12 +8,14 @@ from app.schemas.mfa import (
     MFAEnableRequest, MFAVerifyRequest, MFABackupCodeRequest,
     MFAStatusResponse, MFASetupResponse, MFAVerificationResponse
 )
-from app.crud.mfa import (
+from .crud import (  # 相対インポートに変更
     enable_mfa, disable_mfa, update_mfa_backup_codes,
     get_mfa_status, verify_mfa_totp, verify_mfa_backup_code
 )
 from app.db.session import get_db
 from app.models.user import User
+from app.models.expert import Expert
+from app.services.qr_code import QRCodeService
 from .service import MFAService
 
 router = APIRouter(prefix="/mfa", tags=["MFA"])
@@ -73,26 +75,101 @@ def generate_backup_codes():
     backup_codes = MFAService.generate_backup_codes()
     return {"backup_codes": backup_codes}
 
+
 @router.get("/generate-qr/{user_id}")
 def generate_qr_code(user_id: str, db: Session = Depends(get_db)):
-    """TOTP用のQRコードを生成"""
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user or not user.mfa_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="MFAが有効化されていません"
-        )
+    """QRコード生成（User/Expert両対応）"""
     
     try:
-        qr_data = MFAService.generate_qr_code(
-            secret=user.mfa_totp_secret,
-            email=user.email,
+        # 1. まずUserテーブルで検索
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            user_type = "user"
+            totp_secret = user.mfa_totp_secret
+            email = user.email  # メールアドレスを取得
+        else:
+            # 2. Userで見つからない場合はExpertテーブルで検索
+            expert = db.query(Expert).filter(Expert.id == user_id).first()
+            if expert:
+                user_type = "expert"
+                totp_secret = expert.mfa_totp_secret
+                email = expert.email  # メールアドレスを取得
+            else:
+                raise HTTPException(
+                    status_code=404,
+                    detail="ユーザーまたはエキスパートが見つかりません"
+                )
+        
+        if not totp_secret:
+            raise HTTPException(
+                status_code=400,
+                detail="MFA秘密鍵が設定されていません"
+            )
+        
+        # 3. QRコード生成（正しいメソッド名を使用）
+        qr_service = QRCodeService()
+        qr_result = qr_service.generate_totp_qr(
+            secret=totp_secret,
+            email=email,
             issuer="Agent0"
         )
-        return qr_data
+        
+        return {"qr_code": qr_result["qr_code"]}
         
     except Exception as e:
+        print(f"QRコード生成エラー: {str(e)}")  # デバッグログ
+        raise HTTPException(
+            status_code=500,
+            detail="QRコード生成に失敗しました"
+        )
+
+@router.post("/setup-complete")
+def complete_mfa_setup(
+    mfa_data: MFAEnableRequest,
+    db: Session = Depends(get_db)
+):
+    """MFA設定完了（正式登録完了）"""
+    
+    try:
+        user_id = mfa_data.user_id
+        
+        # 1. MFA有効化（User/Expert両対応）
+        result = enable_mfa(db, user_id, mfa_data.totp_secret, mfa_data.backup_codes)
+        
+        # 2. アカウント制限解除と正式登録完了
+        if result["user_type"] == "expert":
+            expert = result["user"]
+            expert.mfa_required = False
+            expert.account_active = True
+            expert.registration_status = "active"
+            db.commit()
+            
+            return {
+                "message": "MFA設定完了！エキスパート登録が完了しました。",
+                "user_id": user_id,
+                "mfa_enabled": True,
+                "account_active": True,
+                "registration_status": "active",
+                "next_step": "login"
+            }
+        else:
+            # Userの場合
+            user = result["user"]
+            user.mfa_required = False
+            user.account_active = True
+            db.commit()
+            
+            return {
+                "message": "MFA設定完了！ユーザー登録が完了しました。",
+                "user_id": user_id,
+                "mfa_enabled": True,
+                "account_active": True,
+                "next_step": "login"
+            }
+        
+    except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"QRコード生成エラー: {str(e)}"
+            detail=f"MFA設定完了処理に失敗しました: {str(e)}"
         )

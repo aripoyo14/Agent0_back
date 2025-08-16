@@ -1,14 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
-from app.schemas.expert import ExpertCreate, ExpertOut, ExpertLoginRequest, ExpertLoginResponse, ExpertInsightsOut
-from app.crud.expert import create_expert
+from app.schemas.expert import ExpertCreate, ExpertOut, ExpertLoginRequest, ExpertLoginResponse, ExpertInsightsOut, ExpertRegisterResponse
 from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.core.security.jwt import create_access_token, decode_access_token
 from fastapi.security import HTTPBearer
 from app.models.expert import Expert
-from app.crud.expert import get_expert_by_email, get_expert_insights
+from app.crud.expert import get_expert_by_email, get_expert_insights, create_expert
 from app.core.security import verify_password
+from app.core.security.audit import AuditService, AuditEventType
+from app.core.security.rbac.service import RBACService
+from app.core.security.mfa import MFAService
+from app.core.security.rate_limit.dependencies import check_expert_register_rate_limit
+
 
 
 # FastAPIのルーターを初期化
@@ -28,17 +32,83 @@ def get_db():
 ------------------------ """            
 
 # 新規外部有識者登録用のエンドポイント
-@router.post("/register", response_model=ExpertOut)
-def register_expert(expert_in: ExpertCreate, db: Session = Depends(get_db)):
-
-    # パスワードをハッシュ化
-    hashed_pw = hash_password(expert_in.password)
-
-    # CRUD層の関数を使ってDBに外部有識者情報を保存
-    expert = create_expert(db=db, expert_in=expert_in, password_hash=hashed_pw)
-
-    # 保存された 外部有識者情報 （ExpertOut） を返す
-    return expert
+@router.post("/register", response_model=ExpertRegisterResponse)
+def register_expert(
+    http_request: Request,
+    expert_data: ExpertCreate, 
+    db: Session = Depends(get_db),
+    rate_limit_check: bool = Depends(check_expert_register_rate_limit)
+):
+    """新規エキスパート登録（MFA必須）"""
+    
+    # 監査サービスの初期化
+    audit_service = AuditService(db)
+    
+    try:
+        # 1. パスワードをハッシュ化
+        hashed_password = hash_password(expert_data.password)
+        
+        # 2. 基本エキスパート作成（パスワードハッシュを渡す）
+        expert = create_expert(db, expert_data, hashed_password)
+        
+        # 3. MFA設定用の秘密鍵・バックアップコード生成
+        totp_secret = MFAService.generate_totp_secret()
+        backup_codes = MFAService.generate_backup_codes()
+        
+        # 4. MFA関連情報をデータベースに保存
+        expert.mfa_totp_secret = totp_secret
+        expert.mfa_backup_codes = backup_codes
+        expert.mfa_required = True
+        expert.account_active = False  # MFA設定完了まで無効
+        expert.registration_status = "pending_mfa"  # 登録状態を設定
+        
+        # 5. 一時的な保存（MFA設定完了まで正式登録ではない）
+        db.flush()  # コミットせずにフラッシュ
+        
+        # 6. 成功時の監査ログ
+        audit_service.log_event(
+            event_type=AuditEventType.EXPERT_REGISTER_SUCCESS,
+            user_id=str(expert.id),
+            user_type="expert",
+            resource="auth",
+            action="register",
+            success=True,
+            request=http_request,
+            details={
+                "email": expert_data.email,
+                "mfa_required": True,
+                "account_status": "pending_mfa"
+            }
+        )
+        
+        # 7. MFA設定用の情報を返す
+        return {
+            "message": "エキスパート登録完了。MFA設定が必要です。",
+            "user_id": str(expert.id),
+            "mfa_setup_required": True,
+            "totp_secret": totp_secret,
+            "backup_codes": backup_codes,
+            "qr_code_url": f"/api/mfa/setup/{expert.id}",
+            "next_step": "complete_mfa_setup"
+        }
+        
+    except Exception as e:
+        # エラー時はロールバック
+        db.rollback()
+        
+        # エラー時の監査ログ
+        audit_service.log_event(
+            event_type=AuditEventType.EXPERT_REGISTER_FAILURE,
+            resource="auth",
+            action="register",
+            success=False,
+            request=http_request,
+            details={
+                "email": expert_data.email,
+                "error": str(e)
+            }
+        )
+        raise
 
 # 外部有識者ログイン用のエンドポイント
 @router.post("/login", response_model=ExpertLoginResponse)

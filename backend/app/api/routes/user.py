@@ -1,82 +1,126 @@
 # app/api/routes/user.py
 """
- - ユーザー登録APIルートを定義するモジュール。
- - 主に FastAPI を通じて HTTP リクエスト（POST /register）を受け取り、
-   バリデーション、パスワードのハッシュ化、DB登録処理などを行う。
+ユーザー管理用APIルート
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
-from app.schemas.user import UserCreate, UserOut, UserLoginRequest, UserLoginResponse, RoleUpdateRequest
+from app.schemas.user import UserCreate, UserOut, UserRegisterResponse, RoleUpdateRequest
+from app.core.security import verify_password, hash_password
+from app.core.security.jwt import decode_access_token 
+from app.core.security.audit import AuditService, AuditEventType
+from app.core.security.rbac.service import RBACService
+from app.core.security.mfa import MFAService
+from app.core.security.rate_limit.dependencies import check_user_register_rate_limit
 from app.crud.user import create_user, get_user_by_email
-from app.core.security import hash_password, verify_password
-from app.core.security.jwt import create_access_token, decode_access_token
-from fastapi.security import HTTPBearer
-from app.db.session import SessionLocal
-from app.services.qr_code import QRCodeService
 from app.models.user import User
+from app.db.session import get_db
+from app.services.qr_code import QRCodeService
+from fastapi.security import HTTPBearer
+from pydantic import BaseModel
+from typing import List
 
 # RBAC関連のインポート
 from app.core.security.rbac.decorators import require_user_permissions
 from app.core.security.rbac.permissions import Permission
-from app.core.security.rbac.service import RBACService
 
 
 # FastAPIのルーターを初期化
 router = APIRouter(prefix="/users", tags=["Users"])
 
-# DBセッションをリクエストごとに生成・提供する関数
-def get_db():
-    db = SessionLocal()
+@router.post("/register", response_model=UserRegisterResponse)
+def register_user(
+    http_request: Request,
+    user_data: UserCreate, 
+    db: Session = Depends(get_db),
+    rate_limit_check: bool = Depends(check_user_register_rate_limit)
+):
+    """新規ユーザー登録（MFA必須）"""
+    
+    # 監査サービスの初期化
+    audit_service = AuditService(db)
+    
     try:
-        yield db
-    finally:
-        db.close()  # リクエスト処理が終わると、自動的にセッションをクローズ
-
-
-""" ------------------------
- ユーザー関連エンドポイント
------------------------- """
-
-# 新規ユーザー登録用のエンドポイント
-@router.post("/register", response_model=UserOut)
-def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
-
-    # パスワードをハッシュ化
-    hashed_pw = hash_password(user_in.password)
-
-    # CRUD層の関数を使ってDBにユーザー情報を保存
-    user = create_user(db=db, user_in=user_in, password_hash=hashed_pw)
-
-    # 保存された ユーザー情報 （UserOut） を返す
-    return user
+        # 1. 基本ユーザー作成
+        user = create_user(db, user_data)
+        
+        # 2. MFA設定用の秘密鍵・バックアップコード生成
+        totp_secret = MFAService.generate_totp_secret()
+        backup_codes = MFAService.generate_backup_codes()
+        
+        # 3. MFA設定前のアカウント制限（一時的な制限）
+        user.mfa_required = True
+        user.account_active = False  # MFA設定完了まで無効
+        db.commit()
+        
+        # 4. 成功時の監査ログ
+        audit_service.log_event(
+            event_type=AuditEventType.USER_REGISTER_SUCCESS,
+            user_id=str(user.id),
+            user_type="user",
+            resource="auth",
+            action="register",
+            success=True,
+            request=http_request,
+            details={
+                "email": user_data.email,
+                "mfa_required": True,
+                "account_status": "pending_mfa_setup"
+            }
+        )
+        
+        # 5. MFA設定用の情報を返す
+        return {
+            "message": "ユーザー登録完了。MFA設定が必要です。",
+            "user_id": str(user.id),
+            "mfa_setup_required": True,
+            "totp_secret": totp_secret,
+            "backup_codes": backup_codes,
+            "qr_code_url": f"/api/mfa/setup/{user.id}",
+            "next_step": "complete_mfa_setup"
+        }
+        
+    except Exception as e:
+        # エラー時の監査ログ
+        audit_service.log_event(
+            event_type=AuditEventType.USER_REGISTER_FAILURE,
+            resource="auth",
+            action="register",
+            success=False,
+            request=http_request,
+            details={
+                "email": user_data.email,
+                "error": str(e)
+            }
+        )
+        raise
 
 # ユーザーログイン用のエンドポイント
-@router.post("/login", response_model=UserLoginResponse)
-def login_user(request: UserLoginRequest, db: Session = Depends(get_db)):
+# @router.post("/login", response_model=UserLoginResponse)
+# def login_user(request: UserLoginRequest, db: Session = Depends(get_db)):
 
-    # メールでユーザーを検索
-    user = get_user_by_email(db, email=request.email)
+#     # メールでユーザーを検索
+#     user = get_user_by_email(db, email=request.email)
     
-    # ユーザーが存在しない or パスワードが間違っている場合はエラー
-    if not user or not verify_password(request.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="メールアドレスまたはパスワードが正しくありません。",
-        )
+#     # ユーザーが存在しない or パスワードが間違っている場合はエラー
+#     if not user or not verify_password(request.password, user.password_hash):
+#         raise HTTPException(
+#             status_code=status.HTTP_401_UNAUTHORIZED,
+#             detail="メールアドレスまたはパスワードが正しくありません。",
+#         )
 
-    # JWTトークンを発行
-    token = create_access_token({
-        "sub": str(user.id),
-        "role": "user",
-        "user_type": "user"
-    })
+#     # JWTトークンを発行
+#     token = create_access_token({
+#         "sub": str(user.id),
+#         "role": "user",
+#         "user_type": "user"
+#     })
 
-    # トークンとユーザー情報をレスポンスとして返す
-    return UserLoginResponse(
-        access_token=token,
-        user=user
-    )
+#     # トークンとユーザー情報をレスポンスとして返す
+#     return UserLoginResponse(
+#         access_token=token,
+#         user=user
+#     )
 
 # 現在ログイン中のユーザーのプロフィール情報取得用のエンドポイント
 @router.get("/me", response_model=UserOut)

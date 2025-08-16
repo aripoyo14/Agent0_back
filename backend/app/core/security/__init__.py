@@ -9,7 +9,7 @@ from .password import hash_password, verify_password
 from .jwt import create_access_token, verify_access_token, decode_access_token
 
 # MFA関連の機能をエクスポート
-from .mfa import mfa_router, MFAService
+from .mfa import mfa_router, MFAService, enable_mfa, disable_mfa, update_mfa_backup_codes, get_mfa_status, verify_mfa_totp, verify_mfa_backup_code
 
 # RBAC関連の機能をエクスポート
 from .rbac import RBACService, require_user_permissions, require_expert_permissions

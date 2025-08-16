@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from typing import Optional, Literal
+from typing import Optional, Literal, List
 from datetime import datetime
 from uuid import UUID
 
@@ -69,3 +69,14 @@ class RoleUpdateRequest(BaseModel):
         if v not in ['admin', 'staff']:
             raise ValueError('無効なロールです。adminまたはstaffのみ許可されます')
         return v
+
+
+# 新しいスキーマの追加
+class UserRegisterResponse(BaseModel):
+    message: str
+    user_id: str
+    mfa_setup_required: bool
+    totp_secret: str
+    backup_codes: List[str]
+    qr_code_url: str
+    next_step: str
