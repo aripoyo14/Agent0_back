@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import user, auth, policy_proposal_comment, policy_proposal, cosmos_minutes, outreach, expert, search_network_map, meeting
+from app.api.routes import user, auth, policy_proposal_comment, policy_proposal, cosmos_minutes, outreach, expert, search_network_map, meeting, mfa, network_routes
+import app.models
 from app.core.startup import init_external_services
 from app.core.security.mfa import mfa_router
 
@@ -42,6 +43,7 @@ app.include_router(policy_proposal.router, prefix="/api")
 
 # 政策案コメント関連API（投稿など）
 app.include_router(policy_proposal_comment.router, prefix="/api")
+
 # 面談録要約・政策タグAPI（Cosmos DB使用）
 app.include_router(cosmos_minutes.router, prefix="/api")
 
@@ -57,6 +59,8 @@ app.include_router(mfa_router, prefix="/api")
 # 面談関連API
 app.include_router(meeting.router, prefix="/api")
 
+# 人脈ルートAPI
+app.include_router(network_routes.router, prefix="/api")
 
 @app.get("/")
 def root():
