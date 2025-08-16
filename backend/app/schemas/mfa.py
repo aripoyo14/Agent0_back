@@ -7,6 +7,7 @@ from typing import List
 
 class MFAEnableRequest(BaseModel):
     """MFA有効化リクエスト用スキーマ"""
+    user_id: str = Field(..., description="ユーザーID")
     totp_secret: str = Field(..., description="TOTP秘密鍵")
     backup_codes: List[str] = Field(..., description="バックアップコードのリスト")
 

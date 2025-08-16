@@ -1,4 +1,5 @@
-from sqlalchemy import Column, String, Boolean, DateTime, Enum, Text
+from sqlalchemy import Column, String, Boolean, DateTime, Enum, JSON
+from typing import Optional, List
 from sqlalchemy.dialects.mysql import CHAR
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone, timedelta
@@ -54,13 +55,19 @@ class User(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(JST), onupdate=lambda: datetime.now(JST))
 
     # MFAを有効化済みか
-    mfa_enabled = Column(Boolean, default=False)
+    mfa_enabled: bool = Column(Boolean, default=False, nullable=False)
+
+    # MFAを必須化するか
+    mfa_required: bool = Column(Boolean, default=False, nullable=False)
     
     # TOTPの秘密鍵（暗号化）
     mfa_totp_secret = Column(String(255), nullable=True)
-    
-    # バックアップコード群
-    mfa_backup_codes = Column(Text, nullable=True)
+
+    # バックアップコード群（暗号化）
+    mfa_backup_codes: Optional[List[str]] = Column(JSON, nullable=True)
+
+    # アカウント状態
+    account_active: bool = Column(Boolean, default=True, nullable=False)
 
     # リレーション
     organized_meetings = relationship("Meeting", back_populates="organizer")

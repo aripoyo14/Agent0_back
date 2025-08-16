@@ -16,7 +16,7 @@ from app.core.security.session import session_manager, SessionCreate
 from app.db.session import get_db
 from app.models.user import User
 from app.models.expert import Expert
-from app.core.security.rbac.service import RBACService 
+from app.core.security.rbac.service import RBACService
 from app.core.security.rate_limit.dependencies import check_auth_login_rate_limit
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -27,7 +27,7 @@ def login_user(
     http_request: Request, 
     request: LoginRequest, 
     db: Session = Depends(get_db),
-    rate_limit_check: bool = Depends(check_auth_login_rate_limit)  # レート制限チェック
+    rate_limit_check: bool = Depends(check_auth_login_rate_limit)
 ):
     
     # デバッグログを追加
@@ -241,4 +241,3 @@ def logout(
         )
     
     return {"message": "ログアウトしました"}
-

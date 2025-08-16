@@ -28,15 +28,22 @@ def get_expert_by_name_and_company(db: Session, last_name: str, first_name: str,
     return q.first()
 
 
-def create_expert(db: Session, expert_in: ExpertCreate, password_hash: str) -> Expert:
-    """
-    外部有識者を新規作成する。(アイデアソンでの新規ユーザー登録時を想定)
-    会社名はcompaniesテーブルからidを取得
-    会社名が存在しなければ、新規作成してidを取得
-    """
-
-    company = get_or_create_company_by_name(db, expert_in.company_name)
-
+def create_expert(db: Session, expert_in: ExpertCreate, password_hash: str):
+    """新規エキスパート作成"""
+    
+    # 会社名からcompany_idを解決
+    company = db.query(Company).filter(Company.name == expert_in.company_name).first()
+    if not company:
+        # 会社が存在しない場合は新規作成
+        company = Company(
+            id=str(uuid4()),
+            name=expert_in.company_name,
+        )
+        db.add(company)
+        # 会社の作成はコミットする（エキスパートとは独立）
+        db.commit()
+        db.refresh(company)
+    
     expert = Expert(
         id=str(uuid4()),
         sansan_person_id=None,
@@ -49,8 +56,9 @@ def create_expert(db: Session, expert_in: ExpertCreate, password_hash: str) -> E
     )
 
     db.add(expert)
-    db.commit()
-    db.refresh(expert)
+    # ここでコミットしない！
+    # db.commit()  # ← この行を削除
+    # db.refresh(expert)  # ← この行も削除
     return expert
 
 # メールアドレスでexpertを検索する関数

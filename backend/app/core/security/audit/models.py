@@ -39,6 +39,17 @@ class AuditEventType(str, Enum):
     SECURITY_ALERT = "security:alert"
     MFA_ENABLED = "mfa:enabled"
     MFA_DISABLED = "mfa:disabled"
+    
+    # ユーザー登録
+    USER_REGISTER_SUCCESS = "user:register:success"
+    USER_REGISTER_FAILURE = "user:register:failure"
+    
+    # エキスパート登録
+    EXPERT_REGISTER_SUCCESS = "expert:register:success"
+    EXPERT_REGISTER_FAILURE = "expert:register:failure"
+    
+    # MFA設定完了
+    MFA_SETUP_COMPLETE = "mfa:setup:complete"
 
 
 class AuditLog(Base):

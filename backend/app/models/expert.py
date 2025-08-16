@@ -1,6 +1,7 @@
 from __future__ import annotations
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import Column, String, Boolean, DateTime, Integer, Text, Date, Enum, Numeric
+from sqlalchemy import Column, String, Boolean, DateTime, Date, Enum, JSON
+from typing import Optional, List
 from sqlalchemy.dialects.mysql import CHAR, DECIMAL
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -37,6 +38,22 @@ class Expert(Base):
 
     # リレーション
     meeting_participations = relationship("MeetingExpert", back_populates="expert")
+
+    # MFA関連フィールド（新規追加）
+    mfa_enabled: bool = Column(Boolean, default=False, nullable=False)
+    mfa_required: bool = Column(Boolean, default=False, nullable=False) 
+    mfa_totp_secret: Optional[str] = Column(String, nullable=True)
+    mfa_backup_codes: Optional[List[str]] = Column(JSON, nullable=True)
+    
+    # アカウント状態フィールド
+    account_active: bool = Column(Boolean, default=True, nullable=False)
+    
+    # 登録状態フィールド（新規追加）
+    registration_status: str = Column(
+        Enum('pending_mfa', 'active', 'suspended', name='expert_registration_status'),
+        default='pending_mfa',
+        nullable=False
+    )
 
 # 人脈マップ作成時に変わっていた（いったんコメントアウト）
 # class Expert(Base):
