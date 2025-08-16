@@ -16,6 +16,7 @@ from app.core.security.session import session_manager, SessionCreate
 from app.db.session import get_db
 from app.models.user import User
 from app.models.expert import Expert
+from app.core.security.rbac.service import RBACService 
 from app.core.security.rate_limit.dependencies import check_auth_login_rate_limit
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -44,7 +45,6 @@ def login_user(
         if user and verify_password(request.password, user.password_hash):
 
             # ユーザーの権限を取得
-            from app.core.security.rbac.service import RBACService
             user_permissions = RBACService.get_user_permissions(user)
 
             # セッション管理を使用してログイン
@@ -89,8 +89,21 @@ def login_user(
         expert = db.query(Expert).filter(Expert.email == request.email).first()
         if expert and verify_password(request.password, expert.password_hash):
 
-            # Expertの権限を取得
-            expert_permissions = RBACService.get_expert_permissions(expert)
+            # デバッグログを追加
+            print(f"🔍 Expert認証成功: {expert.email}")
+            print(f"🔍 Expert role: {expert.role}")
+            print(f"🔍 Expert role type: {type(expert.role)}")
+
+            try:
+                # Expertの権限を取得
+                expert_permissions = RBACService.get_expert_permissions(expert)
+                print(f"�� Expert permissions: {expert_permissions}")
+            except Exception as e:
+                print(f"❌ Expert権限取得エラー: {e}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Expert権限の取得に失敗しました: {str(e)}"
+                )
 
             # セッション管理を使用してログイン
             session_create = SessionCreate(

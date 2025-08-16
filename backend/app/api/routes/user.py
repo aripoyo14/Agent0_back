@@ -69,7 +69,7 @@ def login_user(request: UserLoginRequest, db: Session = Depends(get_db)):
     token = create_access_token({
         "sub": str(user.id),
         "role": "user",
-        "type": "user"
+        "user_type": "user"
     })
 
     # トークンとユーザー情報をレスポンスとして返す
