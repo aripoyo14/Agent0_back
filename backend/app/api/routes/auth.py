@@ -7,6 +7,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 from app.schemas.auth import LoginRequest, TokenResponse
 from app.core.security import verify_password
 from app.core.security.jwt import create_access_token
@@ -168,23 +169,17 @@ def login_user(
             detail="認証処理中にエラーが発生しました。"
         )
 
+
+# リフレッシュトークン用のリクエストモデルを追加
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
 # リフレッシュトークンを使用してアクセストークンを更新
 @router.post("/refresh")
-async def refresh_token(request: Request):
+async def refresh_token(request: RefreshTokenRequest):
     """リフレッシュトークンを使用してアクセストークンを更新"""
 
-    # デバッグログを追加
-    print(f"🔍 リクエストヘッダー: {dict(request.headers)}")
-    print(f"🔍 リクエストメソッド: {request.method}")
-    
-    try:
-        body = await request.json() 
-        print(f"🔍 リクエストボディ: {body}")
-        refresh_token = body.get("refresh_token")
-        print(f" 抽出されたrefresh_token: {refresh_token}")
-    except Exception as e:
-        print(f"🔍 JSON解析エラー: {e}")
-        refresh_token = None
+    refresh_token = request.refresh_token  # 直接アクセス
     
     if not refresh_token:
         raise HTTPException(
