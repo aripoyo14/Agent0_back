@@ -15,6 +15,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
+        "https://aps-agent0-02-afawambwf2bxd2fv.italynorth-01.azurewebsites.net",
     ],
     allow_credentials=True,
     allow_methods=["*"],
