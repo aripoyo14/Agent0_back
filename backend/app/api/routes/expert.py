@@ -4,7 +4,7 @@ from app.schemas.expert import ExpertCreate, ExpertOut, ExpertLoginRequest, Expe
 from app.crud.expert import create_expert
 from app.core.security import hash_password
 from app.db.session import SessionLocal
-from app.core.jwt import create_access_token, decode_access_token
+from app.core.security.jwt import create_access_token, decode_access_token
 from fastapi.security import HTTPBearer
 from app.models.expert import Expert
 from app.crud.expert import get_expert_by_email

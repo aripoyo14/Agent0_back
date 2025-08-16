@@ -3,6 +3,7 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy import Column, String, Boolean, DateTime, Integer, Text, Date, Enum, Numeric
 from sqlalchemy.dialects.mysql import CHAR, DECIMAL
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from app.db.base_class import Base
 import uuid
 
@@ -33,6 +34,9 @@ class Expert(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(JST))
     updated_at = Column(DateTime, default=lambda: datetime.now(JST), onupdate=lambda: datetime.now(JST))
     role = Column(Enum('contributor', 'viewer', name='expert_role'), default='viewer')
+
+    # リレーション
+    meeting_participations = relationship("MeetingExpert", back_populates="expert")
 
 # 人脈マップ作成時に変わっていた（いったんコメントアウト）
 # class Expert(Base):
