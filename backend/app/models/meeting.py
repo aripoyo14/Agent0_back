@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Date
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Date, Integer
 from sqlalchemy.dialects.mysql import CHAR
 from sqlalchemy.orm import relationship
 from app.db.base_class import Base
@@ -30,6 +30,12 @@ class Meeting(Base):
     # 議事録のURL（OneDrive経由またはアップロード）
     minutes_url = Column(Text, nullable=True)
 
+    # 評価値（1-5）
+    evaluation = Column(Integer, nullable=True, default=None)
+
+    # スタンス値
+    stance = Column(Integer, nullable=True, default=None)
+
     # 会議を主催したユーザーのID（外部キー）
     organized_by_user_id = Column(CHAR(36), ForeignKey("users.id"), nullable=False)
 
@@ -49,18 +55,14 @@ class MeetingUser(Base):
     """
     __tablename__ = "meeting_users"
 
-    # 主キー：UUID
-    id = Column(CHAR(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-
     # 会議ID（外部キー）
-    meeting_id = Column(CHAR(36), ForeignKey("meetings.id"), nullable=False)
+    meeting_id = Column(CHAR(36), ForeignKey("meetings.id"), nullable=False, primary_key=True)
 
     # 参加職員のユーザーID（外部キー）
-    user_id = Column(CHAR(36), ForeignKey("users.id"), nullable=False)
+    user_id = Column(CHAR(36), ForeignKey("users.id"), nullable=False, primary_key=True)
 
-    # 作成・更新日時（JST）
+    # 作成日時（JST）
     created_at = Column(DateTime, default=lambda: datetime.now(JST))
-    updated_at = Column(DateTime, default=lambda: datetime.now(JST), onupdate=lambda: datetime.now(JST))
 
     # リレーション
     meeting = relationship("Meeting", back_populates="meeting_users")
@@ -73,18 +75,14 @@ class MeetingExpert(Base):
     """
     __tablename__ = "meeting_experts"
 
-    # 主キー：UUID
-    id = Column(CHAR(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-
     # 会議ID（外部キー）
-    meeting_id = Column(CHAR(36), ForeignKey("meetings.id"), nullable=False)
+    meeting_id = Column(CHAR(36), ForeignKey("meetings.id"), nullable=False, primary_key=True)
 
     # 参加外部有識者のID（外部キー）
-    expert_id = Column(CHAR(36), ForeignKey("experts.id"), nullable=False)
+    expert_id = Column(CHAR(36), ForeignKey("experts.id"), nullable=False, primary_key=True)
 
-    # 作成・更新日時（JST）
+    # 作成日時（JST）
     created_at = Column(DateTime, default=lambda: datetime.now(JST))
-    updated_at = Column(DateTime, default=lambda: datetime.now(JST), onupdate=lambda: datetime.now(JST))
 
     # リレーション
     meeting = relationship("Meeting", back_populates="meeting_experts")
