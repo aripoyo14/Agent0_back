@@ -1,5 +1,5 @@
 # app/models/policy_proposal/policy_proposal.py
-from sqlalchemy import Column, String, Text, Enum, DateTime, ForeignKey
+from sqlalchemy import Column, String, Text, Enum, DateTime, ForeignKey, Table, Integer
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.mysql import CHAR
 from app.db.base_class import Base
@@ -8,6 +8,15 @@ import uuid
 
 # 日本標準時（JST）
 JST = timezone(timedelta(hours=9))
+
+# 中間テーブルの定義
+policy_proposals_policy_tags = Table(
+    'policy_proposals_policy_tags',
+    Base.metadata,
+    Column('policy_proposal_id', CHAR(36), ForeignKey('policy_proposals.id', ondelete='CASCADE'), primary_key=True),
+    Column('policy_tag_id', Integer, ForeignKey('policy_tags.id', ondelete='CASCADE'), primary_key=True),
+    Column('created_at', DateTime, default=lambda: datetime.now(JST))
+)
 
 class PolicyProposal(Base):
     """
@@ -51,8 +60,8 @@ class PolicyProposal(Base):
     )
 
     # 政策タグ（多対多）
-    tags = relationship(
-        "PolicyProposalsPolicyTags",
-        back_populates="proposal",
-        cascade="all, delete-orphan",
+    policy_tags = relationship(
+        "PolicyTag",
+        secondary=policy_proposals_policy_tags,
+        back_populates="policy_proposals"
     )
