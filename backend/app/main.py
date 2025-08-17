@@ -1,7 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-#from app.api.routes import user, auth, policy_proposal_comment, policy_proposal, cosmos_minutes, outreach, expert, search_network_map, meeting, mfa, network_routes
-from app.api.routes import user, auth, policy_proposal_comment, policy_proposal, cosmos_minutes, outreach, expert, search_network_map, meeting, network_routes
+from fastapi.responses import JSONResponse
+from app.api.routes import user, auth, policy_proposal_comment, policy_proposal, cosmos_minutes, outreach, expert, search_network_map, meeting, network_routes, business_card
 import app.models
 from app.core.startup import init_external_services
 from app.core.security.mfa import mfa_router
@@ -63,6 +63,10 @@ app.include_router(meeting.router, prefix="/api")
 
 # 人脈ルートAPI
 app.include_router(network_routes.router, prefix="/api")
+
+# 名刺画像アップロードAPI
+app.include_router(business_card.router, prefix="/api")
+
 
 @app.get("/")
 def root():

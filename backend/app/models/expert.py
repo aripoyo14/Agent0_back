@@ -55,6 +55,9 @@ class Expert(Base):
         nullable=False
     )
 
+    # 名刺画像関連のカラムを追加
+    business_card_image_url = Column(String(500), nullable=True, comment="名刺画像のURL")
+    
 # 人脈マップ作成時に変わっていた（いったんコメントアウト）
 # class Expert(Base):
 #     """
