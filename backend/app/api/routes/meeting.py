@@ -4,14 +4,17 @@ from typing import List, Optional
 from app.db.session import get_db
 from app.models.user import User
 from app.core.dependencies import get_current_user
-from app.crud.meeting import meeting_crud
+from app.crud.meeting import meeting_crud, meeting_evaluation_crud
 from app.services.file_upload import file_upload_service
 from app.services.cosmos_vector import cosmos_vector_service
 from app.schemas.meeting import (
     MeetingCreate, 
     MeetingUpdate, 
     MeetingResponse, 
-    MinutesUploadResponse
+    MinutesUploadResponse,
+    MeetingEvaluationCreate,
+    MeetingEvaluationUpdate,
+    MeetingEvaluationResponse
 )
 from app.schemas.summary import SummaryRequest
 
@@ -25,7 +28,7 @@ async def create_meeting(
 ):
     """面談を作成"""
     try:
-        meeting = meeting_crud.create_meeting(db, meeting_data)
+        meeting = meeting_crud.create(db, meeting_data)
         return meeting
     except Exception as e:
         raise HTTPException(
@@ -40,7 +43,7 @@ async def get_meeting(
     current_user: User = Depends(get_current_user)
 ):
     """面談を取得"""
-    meeting = meeting_crud.get_meeting(db, meeting_id)
+    meeting = meeting_crud.get(db, meeting_id)
     if not meeting:
         raise HTTPException(
             status_code=404,
@@ -48,13 +51,15 @@ async def get_meeting(
         )
     return meeting
 
-@router.get("/", response_model=List[MeetingResponse], summary="Get Meetings by Organizer")
-async def get_meetings_by_organizer(
+@router.get("/", response_model=List[MeetingResponse], summary="Get All Meetings")
+async def get_all_meetings(
+    skip: int = 0,
+    limit: int = 100,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """主催者別の面談一覧を取得"""
-    meetings = meeting_crud.get_meetings_by_organizer(db, current_user.id)
+    """面談一覧を取得"""
+    meetings = meeting_crud.get_all(db, skip=skip, limit=limit)
     return meetings
 
 @router.put("/{meeting_id}", response_model=MeetingResponse, summary="Update Meeting")
@@ -65,7 +70,7 @@ async def update_meeting(
     current_user: User = Depends(get_current_user)
 ):
     """面談を更新"""
-    meeting = meeting_crud.update_meeting(db, meeting_id, meeting_data)
+    meeting = meeting_crud.update(db, meeting_id, meeting_data)
     if not meeting:
         raise HTTPException(
             status_code=404,
@@ -80,7 +85,7 @@ async def delete_meeting(
     current_user: User = Depends(get_current_user)
 ):
     """面談を削除"""
-    success = meeting_crud.delete_meeting(db, meeting_id)
+    success = meeting_crud.delete(db, meeting_id)
     if not success:
         raise HTTPException(
             status_code=404,
@@ -100,7 +105,7 @@ async def upload_minutes(
     """議事録ファイルをアップロードしてベクトル化"""
     try:
         # 面談の存在確認
-        meeting = meeting_crud.get_meeting(db, meeting_id)
+        meeting = meeting_crud.get(db, meeting_id)
         if not meeting:
             raise HTTPException(
                 status_code=404,
@@ -163,3 +168,69 @@ async def upload_minutes(
             status_code=500,
             detail=f"議事録アップロード中にエラーが発生しました: {str(e)}"
         )
+
+# 評価関連エンドポイント
+@router.put("/{meeting_id}/evaluate", response_model=MeetingEvaluationResponse, summary="Update Meeting Evaluation")
+async def evaluate_meeting(
+    meeting_id: str,
+    evaluation_data: MeetingEvaluationCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """面談の評価を更新（既存カラム使用）"""
+    try:
+        # 面談の存在確認
+        meeting = meeting_crud.get(db, meeting_id)
+        if not meeting:
+            raise HTTPException(
+                status_code=404,
+                detail="面談が見つかりません"
+            )
+        
+        # 評価を更新
+        updated_meeting = meeting_evaluation_crud.update_meeting_evaluation(db, meeting_id, evaluation_data)
+        if not updated_meeting:
+            raise HTTPException(
+                status_code=404,
+                detail="面談が見つかりません"
+            )
+        
+        return updated_meeting
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"面談評価更新中にエラーが発生しました: {str(e)}"
+        )
+
+@router.get("/{meeting_id}/evaluation", response_model=MeetingEvaluationResponse, summary="Get Meeting Evaluation")
+async def get_meeting_evaluation(
+    meeting_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """面談の評価を取得（既存カラム使用）"""
+    try:
+        # 面談の存在確認
+        meeting = meeting_crud.get(db, meeting_id)
+        if not meeting:
+            raise HTTPException(
+                status_code=404,
+                detail="面談が見つかりません"
+            )
+        
+        return meeting
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"評価取得中にエラーが発生しました: {str(e)}"
+        )
+
+
+
+
