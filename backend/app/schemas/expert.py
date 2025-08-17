@@ -95,6 +95,12 @@ class PolicyProposalCommentOut(BaseModel):
 
 class ExpertInsightsOut(BaseModel):
     expert_id: str
+    experts_name: str | None = None
+    company_id: str | None = None
+    company_name: str | None = None
+    department: str | None = None
+    email: EmailStr | None = None
+    mobile: str | None = None
     meetings: list[MeetingOverviewOut]
     policy_comments: list[PolicyProposalCommentOut]
     evaluation_average: float | None = None  # 小数第1位
