@@ -4,7 +4,7 @@ from typing import List, Optional
 import httpx
 import re
 
-from app.api.deps import get_current_user
+from app.core.dependencies import get_current_user
 from app.crud.meeting import meeting_crud, meeting_evaluation_crud
 from app.db.session import get_db
 from app.models.user import User
