@@ -296,8 +296,29 @@ def get_expert_insights(db: Session, expert_id: str):
                     "title": career_c.title,
                 }
 
+    # expert 基本情報（表示用）
+    expert_display_name = None
+    expert_email = None
+    expert_mobile = None
+    expert_department = None
+    expert_company_id = None
+    expert_company_name_for_header = None
+    if expert_row:
+        expert_display_name = f"{expert_row.last_name} {expert_row.first_name}" if (expert_row.last_name or expert_row.first_name) else None
+        expert_email = expert_row.email
+        expert_mobile = expert_row.mobile
+        expert_department = expert_row.department
+        expert_company_id = expert_row.company_id
+        expert_company_name_for_header = expert_company_name
+
     return {
         "expert_id": expert_id,
+        "experts_name": expert_display_name,
+        "company_id": expert_company_id,
+        "company_name": expert_company_name_for_header,
+        "department": expert_department,
+        "email": expert_email,
+        "mobile": expert_mobile,
         "meetings": meetings_out,
         "policy_comments": (
             [
