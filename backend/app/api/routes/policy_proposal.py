@@ -7,7 +7,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, Request, status
 from sqlalchemy.orm import Session
 from app.schemas.policy_proposal.policy_proposal import ProposalCreate, ProposalOut, AttachmentOut
-from app.crud.policy_proposal.policy_proposal import create_proposal, create_attachment
+from app.schemas.policy_proposal_comment import PolicyProposalCommentResponse
+from app.crud.policy_proposal.policy_proposal import create_proposal, create_attachment, get_proposal, list_proposals
 from app.models.policy_proposal.policy_proposal_attachments import PolicyProposalAttachment
 from app.db.session import SessionLocal
 from app.core.blob import upload_binary_to_blob
@@ -121,31 +122,65 @@ def post_policy_proposal_with_attachments(
 
 
 # 政策案の一覧取得（簡易検索・ページング付き）
-# @router.get("/", response_model=list[ProposalOut])
-# def get_policy_proposals(
-#     status: str | None = Query(None, description="draft / published / archived のいずれか"),
-#     q: str | None = Query(None, description="タイトル・本文の部分一致"),
-#     offset: int = Query(0, ge=0),
-#     limit: int = Query(20, ge=1, le=100),
-#     db: Session = Depends(get_db),
-# ):
-#     """
-#     政策案の一覧を取得する。
-#     - status でのフィルタ
-#     - タイトル/本文の部分一致検索
-#     - created_at の降順で返却
-#     """
-#     rows = list_proposals(db=db, status_filter=status, q=q, offset=offset, limit=limit)
-#     return rows
+@router.get("/", response_model=list[ProposalOut])
+def get_policy_proposals(
+    status: str | None = Query(None, description="draft / published / archived のいずれか"),
+    q: str | None = Query(None, description="タイトル・本文の部分一致"),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """
+    政策案の一覧を取得する。
+    - status でのフィルタ
+    - タイトル/本文の部分一致検索
+    - created_at の降順で返却
+    """
+    rows = list_proposals(db=db, status_filter=status, q=q, offset=offset, limit=limit)
+    return rows
 
 
-# # 政策案の詳細取得
-# @router.get("/{proposal_id}", response_model=ProposalOut)
-# def get_policy_proposal_detail(proposal_id: str, db: Session = Depends(get_db)):
-#     """
-#     主キー（UUID文字列）を指定して政策案の詳細を取得する。
-#     """
-#     proposal = get_proposal(db=db, proposal_id=proposal_id)
-#     if not proposal:
-#         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy proposal not found")
-#     return proposal
+# 政策案の詳細取得
+@router.get("/{proposal_id}", response_model=ProposalOut)
+def get_policy_proposal_detail(proposal_id: str, db: Session = Depends(get_db)):
+    """
+    主キー（UUID文字列）を指定して政策案の詳細を取得する。
+    """
+    proposal = get_proposal(db=db, proposal_id=proposal_id)
+    if not proposal:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy proposal not found")
+    return proposal
+
+
+# 政策案のコメント一覧取得
+@router.get("/{proposal_id}/comments", response_model=list[PolicyProposalCommentResponse])
+def get_policy_proposal_comments(
+    proposal_id: str, 
+    db: Session = Depends(get_db), 
+    limit: int = 50, 
+    offset: int = 0
+):
+    """
+    特定の政策案IDに紐づくコメント一覧を取得する。
+    
+    ## 機能
+    - 指定された政策案に投稿されたコメント一覧を取得
+    - 投稿日時の降順でソート
+    - ページング対応（limit/offset）
+    
+    ## パラメータ
+    - `proposal_id`: 政策案のUUID
+    - `limit`: 取得件数（デフォルト: 50, 最大: 100）
+    - `offset`: スキップ件数（デフォルト: 0）
+    
+    ## レスポンス
+    - 論理削除されたコメントは除外
+    - 空の場合は空配列を返却
+    
+    ## 使用例
+    ```
+    GET /api/policy-proposals/11111111-2222-3333-4444-555555555555/comments?limit=20&offset=0
+    ```
+    """
+    from app.crud.policy_proposal.policy_proposal_comment import list_comments_by_policy_proposal_id
+    return list_comments_by_policy_proposal_id(db, proposal_id, limit=limit, offset=offset)

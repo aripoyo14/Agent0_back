@@ -85,44 +85,44 @@ def list_attachments_by_policy_proposal_id(
     return rows
 
 
-# def get_proposal(db: Session, proposal_id: str) -> Optional[PolicyProposal]:
-#     """
-#     主キー（UUID文字列）で政策案を1件取得する関数。
-#     見つからない場合は None を返す。
-#     """
-#     return db.query(PolicyProposal).filter(PolicyProposal.id == proposal_id).first()
+def get_proposal(db: Session, proposal_id: str) -> Optional[PolicyProposal]:
+    """
+    主キー（UUID文字列）で政策案を1件取得する関数。
+    見つからない場合は None を返す。
+    """
+    return db.query(PolicyProposal).filter(PolicyProposal.id == proposal_id).first()
 
 
-# def list_proposals(
-#     db: Session,
-#     *,
-#     status_filter: Optional[str] = None,  # "draft" | "published" | "archived"
-#     q: Optional[str] = None,              # タイトル/本文の部分一致
-#     offset: int = 0,
-#     limit: int = 20,
-# ) -> List[PolicyProposal]:
-#     """
-#     政策案の一覧を取得する関数（簡易検索付き）。
-#      - status でのフィルタ
-#      - タイトル/本文の部分一致検索
-#      - 新しい順（created_at DESC）
-#     """
-#     qs = db.query(PolicyProposal)
+def list_proposals(
+    db: Session,
+    *,
+    status_filter: Optional[str] = None,  # "draft" | "published" | "archived"
+    q: Optional[str] = None,              # タイトル/本文の部分一致
+    offset: int = 0,
+    limit: int = 20,
+) -> List[PolicyProposal]:
+    """
+    政策案の一覧を取得する関数（簡易検索付き）。
+     - status でのフィルタ
+     - タイトル/本文の部分一致検索
+     - 新しい順（created_at DESC）
+    """
+    qs = db.query(PolicyProposal)
 
-#     if status_filter:
-#         qs = qs.filter(PolicyProposal.status == status_filter)
+    if status_filter:
+        qs = qs.filter(PolicyProposal.status == status_filter)
 
-#     if q:
-#         like = f"%{q}%"
-#         qs = qs.filter(
-#             (PolicyProposal.title.ilike(like)) |
-#             (PolicyProposal.body.ilike(like))
-#         )
+    if q:
+        like = f"%{q}%"
+        qs = qs.filter(
+            (PolicyProposal.title.ilike(like)) |
+            (PolicyProposal.body.ilike(like))
+        )
 
-#     rows = (
-#         qs.order_by(PolicyProposal.created_at.desc())
-#           .offset(offset)
-#           .limit(limit)
-#           .all()
-#     )
-#     return rows
+    rows = (
+        qs.order_by(PolicyProposal.created_at.desc())
+          .offset(offset)
+          .limit(limit)
+          .all()
+    )
+    return rows
