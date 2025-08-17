@@ -94,8 +94,8 @@ def get_proposal(db: Session, proposal_id: str) -> Optional[PolicyProposal]:
     return (
         db.query(PolicyProposal)
         .options(
-            db.joinedload(PolicyProposal.attachments),
-            db.joinedload(PolicyProposal.policy_tags)
+            joinedload(PolicyProposal.attachments),
+            joinedload(PolicyProposal.policy_tags)
         )
         .filter(PolicyProposal.id == proposal_id)
         .first()
@@ -131,8 +131,8 @@ def list_proposals(
 
     rows = (
         qs.options(
-            db.joinedload(PolicyProposal.attachments),
-            db.joinedload(PolicyProposal.policy_tags)
+            joinedload(PolicyProposal.attachments),
+            joinedload(PolicyProposal.policy_tags)
         )
         .order_by(PolicyProposal.created_at.desc())
         .offset(offset)
