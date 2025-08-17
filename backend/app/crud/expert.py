@@ -257,21 +257,65 @@ def get_expert_insights(db: Session, expert_id: str):
     evaluation_average = round(sum(eval_values) / len(eval_values), 1) if eval_values else None
     stance_average = int(round(sum(stance_values) / len(stance_values))) if stance_values else None
 
+    # コメント日時点のキャリア解決
+    comment_date_to_career = {}
+    if comments:
+        distinct_comment_dates = sorted({(c.posted_at.date() if hasattr(c.posted_at, 'date') else c.posted_at) for c in comments})
+        for d in distinct_comment_dates:
+            career_c = (
+                db.query(ExpertCareer)
+                .filter(
+                    ExpertCareer.expert_id == expert_id,
+                    or_(
+                        and_(
+                            ExpertCareer.start_date.isnot(None),
+                            ExpertCareer.end_date.isnot(None),
+                            ExpertCareer.start_date <= d,
+                            ExpertCareer.end_date >= d,
+                        ),
+                        and_(
+                            ExpertCareer.start_date.isnot(None),
+                            ExpertCareer.end_date.is_(None),
+                            ExpertCareer.start_date <= d,
+                        ),
+                        ExpertCareer.is_current == True,
+                    ),
+                )
+                .order_by(
+                    (ExpertCareer.end_date.is_(None)).asc(),
+                    ExpertCareer.end_date.desc(),
+                    (ExpertCareer.start_date.is_(None)).asc(),
+                    ExpertCareer.start_date.desc(),
+                )
+                .first()
+            )
+            if career_c:
+                comment_date_to_career[d] = {
+                    "company": career_c.company_name,
+                    "dept": career_c.department_name,
+                    "title": career_c.title,
+                }
+
     return {
         "expert_id": expert_id,
         "meetings": meetings_out,
-        "policy_comments": [
-            {
-                "policy_proposal_id": r.policy_proposal_id,
-                "policy_title": r.policy_title,
-                "comment_text": r.comment_text,
-                "posted_at": r.posted_at,
-                "like_count": r.like_count,
-                "evaluation": r.evaluation,
-                "stance": r.stance,
-            }
-            for r in comments
-        ],
+        "policy_comments": (
+            [
+                (lambda d_info: {
+                    "policy_proposal_id": r.policy_proposal_id,
+                    "policy_title": r.policy_title,
+                    "comment_text": r.comment_text,
+                    "posted_at": r.posted_at,
+                    "like_count": r.like_count,
+                    "evaluation": r.evaluation,
+                    "stance": r.stance,
+                    "expert_company_name": (d_info["company"] if d_info else expert_company_name),
+                    "expert_department_name": (d_info["dept"] if d_info else (expert_row.department if expert_row else None)),
+                    "expert_title": (d_info["title"] if d_info else (expert_row.title if expert_row else None)),
+                })(comment_date_to_career.get(r.posted_at.date() if hasattr(r.posted_at, 'date') else r.posted_at))
+                for r in comments
+            ]
+        ),
         "evaluation_average": evaluation_average,
         "stance_average": stance_average,
     }

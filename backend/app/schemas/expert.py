@@ -88,6 +88,9 @@ class PolicyProposalCommentOut(BaseModel):
     like_count: int
     evaluation: int | None = None
     stance: int | None = None
+    expert_company_name: str | None = None
+    expert_department_name: str | None = None
+    expert_title: str | None = None
 
 
 class ExpertInsightsOut(BaseModel):
