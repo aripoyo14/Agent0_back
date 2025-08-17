@@ -33,7 +33,7 @@ def get_db():
 
 # 新規外部有識者登録用のエンドポイント
 @router.post("/register", response_model=ExpertRegisterResponse)
-def register_expert(
+async def register_expert(
     http_request: Request,
     expert_data: ExpertCreate, 
     db: Session = Depends(get_db),
@@ -50,6 +50,13 @@ def register_expert(
         
         # 2. 基本エキスパート作成（パスワードハッシュを渡す）
         expert = create_expert(db, expert_data, hashed_password)
+        # business_card_image_urlを明示的に設定
+        if expert_data.business_card_image_url:
+            expert.business_card_image_url = expert_data.business_card_image_url
+        
+        # デバッグ用ログを追加
+        print(f"受信したbusiness_card_image_url: {expert_data.business_card_image_url}")
+        print(f"設定後のexpert.business_card_image_url: {expert.business_card_image_url}")
         
         # 3. MFA設定用の秘密鍵・バックアップコード生成
         totp_secret = MFAService.generate_totp_secret()

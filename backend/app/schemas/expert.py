@@ -11,6 +11,7 @@ class ExpertCreate(BaseModel):
     department: str
     email: EmailStr
     password: str = Field(min_length=8)
+    business_card_image_url: Optional[str] = None
 
 
 class ExpertOut(BaseModel):
