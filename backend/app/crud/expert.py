@@ -303,6 +303,7 @@ def get_expert_insights(db: Session, expert_id: str):
     expert_department = None
     expert_company_id = None
     expert_company_name_for_header = None
+    expert_title_header = None
     if expert_row:
         expert_display_name = f"{expert_row.last_name} {expert_row.first_name}" if (expert_row.last_name or expert_row.first_name) else None
         expert_email = expert_row.email
@@ -310,6 +311,7 @@ def get_expert_insights(db: Session, expert_id: str):
         expert_department = expert_row.department
         expert_company_id = expert_row.company_id
         expert_company_name_for_header = expert_company_name
+        expert_title_header = expert_row.title
 
     return {
         "expert_id": expert_id,
@@ -319,6 +321,7 @@ def get_expert_insights(db: Session, expert_id: str):
         "department": expert_department,
         "email": expert_email,
         "mobile": expert_mobile,
+        "title": expert_title_header,
         "meetings": meetings_out,
         "policy_comments": (
             [

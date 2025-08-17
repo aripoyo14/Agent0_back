@@ -101,6 +101,7 @@ class ExpertInsightsOut(BaseModel):
     department: str | None = None
     email: EmailStr | None = None
     mobile: str | None = None
+    title: str | None = None
     meetings: list[MeetingOverviewOut]
     policy_comments: list[PolicyProposalCommentOut]
     evaluation_average: float | None = None  # 小数第1位
