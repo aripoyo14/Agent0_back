@@ -1,5 +1,6 @@
 # app/models/policy_tag.py
 from sqlalchemy import Column, String, Text, DateTime, Integer, UniqueConstraint
+from sqlalchemy.orm import relationship
 from app.db.base_class import Base
 from datetime import datetime, timezone, timedelta
 
@@ -33,3 +34,10 @@ class PolicyTag(Base):
 
     # 更新日時（JST）
     updated_at = Column(DateTime, default=lambda: datetime.now(JST), onupdate=lambda: datetime.now(JST))
+
+    # 政策提案（多対多）
+    policy_proposals = relationship(
+        "PolicyProposal",
+        secondary="policy_proposals_policy_tags",
+        back_populates="policy_tags"
+    )

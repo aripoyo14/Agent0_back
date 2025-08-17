@@ -88,13 +88,13 @@ class ProposalOut(BaseModel):
         
         # 添付ファイル情報
         if hasattr(proposal, 'attachments') and proposal.attachments:
-            data["attachments"] = [AttachmentOut.from_orm(att) for att in proposal.attachments]
+            data["attachments"] = [AttachmentOut.model_validate(att) for att in proposal.attachments]
         else:
             data["attachments"] = None
             
         # 政策タグ情報
-        if hasattr(proposal, 'tags') and proposal.tags:
-            data["policy_tags"] = [PolicyTagOut.from_orm(tag.tag) for tag in proposal.tags if tag.tag]
+        if hasattr(proposal, 'policy_tags') and proposal.policy_tags:
+            data["policy_tags"] = [PolicyTagOut.model_validate(tag) for tag in proposal.policy_tags]
         else:
             data["policy_tags"] = None
             
