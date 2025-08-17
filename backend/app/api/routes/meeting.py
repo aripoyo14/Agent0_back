@@ -1,22 +1,37 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from app.db.session import get_db
-from app.models.user import User
+import httpx
+import re
+
 from app.core.dependencies import get_current_user
 from app.crud.meeting import meeting_crud, meeting_evaluation_crud
-from app.services.file_upload import file_upload_service
-from app.services.cosmos_vector import cosmos_vector_service
+from app.db.session import get_db
+from app.models.user import User
 from app.schemas.meeting import (
-    MeetingCreate, 
-    MeetingUpdate, 
-    MeetingResponse, 
-    MinutesUploadResponse,
-    MeetingEvaluationCreate,
-    MeetingEvaluationUpdate,
-    MeetingEvaluationResponse
+    MeetingCreate, MeetingUpdate, MeetingResponse,
+    MeetingEvaluationCreate, MeetingEvaluationUpdate, MeetingEvaluationResponse,
+    MinutesUploadResponse
 )
 from app.schemas.summary import SummaryRequest
+from app.services.file_upload import file_upload_service
+from app.services.cosmos_vector import cosmos_vector_service
+
+def clean_text_for_api(text: str) -> str:
+    """API送信用にテキストを整形"""
+    if not text:
+        return ""
+    
+    # 改行文字を適切に処理
+    cleaned_text = text.replace('\r\n', '\n').replace('\r', '\n')
+    
+    # 連続する改行を単一の改行に
+    cleaned_text = re.sub(r'\n{3,}', '\n\n', cleaned_text)
+    
+    # 前後の空白を削除
+    cleaned_text = cleaned_text.strip()
+    
+    return cleaned_text
 
 router = APIRouter(prefix="/meetings", tags=["Meetings"])
 
@@ -129,35 +144,65 @@ async def upload_minutes(
 
         # ベクトル化処理
         vectorization_result = None
+        summary_data = None
+        
         if minutes_text and minutes_text != f"[{file.filename}の内容を抽出中...]":
             # tag_idsをリストに変換
             tag_ids_list = []
             if tag_ids:
                 tag_ids_list = [int(tag_id.strip()) for tag_id in tag_ids.split(",") if tag_id.strip()]
 
-            # SummaryRequestを作成
-            summary_request = SummaryRequest(
-                minutes=minutes_text,
-                expert_id=expert_id or "",
-                tag_ids=tag_ids_list
-            )
+            # テキストを整形
+            cleaned_minutes = clean_text_for_api(minutes_text)
+            
+            # POST /api/cosmos-minutes/minutes エンドポイントを呼び出し
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        f"http://localhost:8000/api/cosmos-minutes/minutes",
+                        json={
+                            "minutes": cleaned_minutes,
+                            "expert_id": expert_id or "",
+                            "tag_ids": tag_ids_list
+                        },
+                        timeout=30.0  # 30秒のタイムアウト
+                    )
+                    
+                    if response.status_code == 200:
+                        summary_data = response.json()
+                        vectorization_result = summary_data.get("vectorization_result")
+                        
+                        # 要約をMTGデータに保存
+                        if summary_data.get("summary"):
+                            meeting_crud.update_summary(db, meeting_id, summary_data["summary"])
+                    else:
+                        # API呼び出しが失敗した場合のフォールバック処理
+                        print(f"Warning: cosmos-minutes API call failed with status {response.status_code}")
+                        vectorization_result = {
+                            "success": False,
+                            "message": f"要約生成API呼び出しに失敗しました: {response.status_code}"
+                        }
+                        
+            except Exception as e:
+                print(f"Error calling cosmos-minutes API: {str(e)}")
+                # エラーが発生した場合のフォールバック処理
+                vectorization_result = {
+                    "success": False,
+                    "message": f"要約生成API呼び出し中にエラーが発生しました: {str(e)}"
+                }
 
-            # 既存のcosmos-minutesエンドポイントの処理を実行
-            summary_result = cosmos_vector_service.vectorize_minutes(
-                summary_title=f"面談録: {meeting.title}",
-                summary_content=minutes_text[:500] + "..." if len(minutes_text) > 500 else minutes_text,
-                expert_id=expert_id,
-                tag_ids=tag_ids_list,
-                raw_minutes=minutes_text,
-            )
-
-            vectorization_result = summary_result
-
+        # レスポンスメッセージを構築
+        message = "議事録のアップロードが完了しました"
+        if summary_data and summary_data.get("summary"):
+            message += f"。要約: {summary_data['summary'][:100]}..."
+        elif vectorization_result and not vectorization_result.get("success"):
+            message += f"。注意: {vectorization_result.get('message', '要約生成に失敗しました')}"
+        
         return MinutesUploadResponse(
             success=True,
             meeting_id=meeting_id,
             minutes_url=file_url,
-            message="議事録のアップロードが完了しました",
+            message=message,
             vectorization_result=vectorization_result
         )
 

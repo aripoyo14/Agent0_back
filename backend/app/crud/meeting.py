@@ -86,6 +86,17 @@ class MeetingCRUD:
         db.refresh(meeting)
         return meeting
 
+    def update_summary(self, db: Session, meeting_id: str, summary: str) -> Optional[Meeting]:
+        """面談の要約を更新"""
+        meeting = self.get(db, meeting_id)
+        if not meeting:
+            return None
+        
+        meeting.summary = summary
+        db.commit()
+        db.refresh(meeting)
+        return meeting
+
 class MeetingEvaluationCRUD:
     """面談評価CRUD操作クラス（既存カラム使用）"""
     
