@@ -49,3 +49,10 @@ class PolicyProposal(Base):
         back_populates="proposal",
         cascade="all, delete-orphan",
     )
+
+    # 政策タグ（多対多）
+    tags = relationship(
+        "PolicyProposalsPolicyTags",
+        back_populates="proposal",
+        cascade="all, delete-orphan",
+    )

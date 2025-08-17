@@ -5,7 +5,7 @@
 """
 
 from typing import Optional, List
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException, status
 from datetime import datetime, timezone, timedelta
 
@@ -89,8 +89,17 @@ def get_proposal(db: Session, proposal_id: str) -> Optional[PolicyProposal]:
     """
     主キー（UUID文字列）で政策案を1件取得する関数。
     見つからない場合は None を返す。
+    政策タグ情報も含めて取得する。
     """
-    return db.query(PolicyProposal).filter(PolicyProposal.id == proposal_id).first()
+    return (
+        db.query(PolicyProposal)
+        .options(
+            db.joinedload(PolicyProposal.attachments),
+            db.joinedload(PolicyProposal.tags).joinedload("tag")
+        )
+        .filter(PolicyProposal.id == proposal_id)
+        .first()
+    )
 
 
 def list_proposals(
@@ -106,6 +115,7 @@ def list_proposals(
      - status でのフィルタ
      - タイトル/本文の部分一致検索
      - 新しい順（created_at DESC）
+     - 政策タグ情報も含めて取得する
     """
     qs = db.query(PolicyProposal)
 
@@ -120,9 +130,13 @@ def list_proposals(
         )
 
     rows = (
-        qs.order_by(PolicyProposal.created_at.desc())
-          .offset(offset)
-          .limit(limit)
-          .all()
+        qs.options(
+            db.joinedload(PolicyProposal.attachments),
+            db.joinedload(PolicyProposal.tags).joinedload("tag")
+        )
+        .order_by(PolicyProposal.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
     )
     return rows

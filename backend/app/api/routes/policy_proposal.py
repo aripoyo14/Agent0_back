@@ -135,9 +135,10 @@ def get_policy_proposals(
     - status でのフィルタ
     - タイトル/本文の部分一致検索
     - created_at の降順で返却
+    - 政策タグ情報も含めて返却
     """
     rows = list_proposals(db=db, status_filter=status, q=q, offset=offset, limit=limit)
-    return rows
+    return [ProposalOut.from_proposal_with_relations(proposal) for proposal in rows]
 
 
 # 政策案の詳細取得
@@ -145,11 +146,12 @@ def get_policy_proposals(
 def get_policy_proposal_detail(proposal_id: str, db: Session = Depends(get_db)):
     """
     主キー（UUID文字列）を指定して政策案の詳細を取得する。
+    政策タグ情報も含めて返却する。
     """
     proposal = get_proposal(db=db, proposal_id=proposal_id)
     if not proposal:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy proposal not found")
-    return proposal
+    return ProposalOut.from_proposal_with_relations(proposal)
 
 
 # 政策案のコメント一覧取得
