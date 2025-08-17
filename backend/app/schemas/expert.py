@@ -75,6 +75,9 @@ class MeetingOverviewOut(BaseModel):
     evaluation: int | None = None
     stance: int | None = None
     participants: list[MeetingParticipantOut] = []
+    expert_company_name: str | None = None
+    expert_department_name: str | None = None
+    expert_title: str | None = None
 
 
 class PolicyProposalCommentOut(BaseModel):

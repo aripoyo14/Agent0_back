@@ -12,6 +12,7 @@ from app.models.user.users_departments import UsersDepartments
 from app.models.user.department import Department
 from app.models.policy_proposal.policy_proposal_comment import PolicyProposalComment
 from app.models.policy_proposal.policy_proposal import PolicyProposal
+from app.models.expert_career import ExpertCareer
 from app.schemas.expert import ExpertCreate
 from sqlalchemy import func, and_, or_, cast, Date, Integer
 from app.crud.company import get_or_create_company_by_name
@@ -119,6 +120,54 @@ def get_expert_insights(db: Session, expert_id: str):
         for r in ud_rows:
             departments_map.setdefault(r.user_id, []).append((r.name, r.section))
 
+    # その会議日時点でのエキスパートの会社・部署・役職を取得するため、meeting_date ごとに career を解決
+    # ルール: start_date <= meeting_date <= end_date を優先、なければ start_date<=meeting_date で最も近いもの、
+    # いずれも無ければ is_current=True を fallback、最終手段として Expert テーブルの直接属性
+    career_rows = []
+    if meetings:
+        distinct_dates = sorted({m.meeting_date for m in meetings})
+        for d in distinct_dates:
+            career = (
+                db.query(ExpertCareer)
+                .filter(
+                    ExpertCareer.expert_id == expert_id,
+                    or_(
+                        and_(
+                            ExpertCareer.start_date.isnot(None),
+                            ExpertCareer.end_date.isnot(None),
+                            ExpertCareer.start_date <= d,
+                            ExpertCareer.end_date >= d,
+                        ),
+                        and_(
+                            ExpertCareer.start_date.isnot(None),
+                            ExpertCareer.end_date.is_(None),
+                            ExpertCareer.start_date <= d,
+                        ),
+                        ExpertCareer.is_current == True,
+                    ),
+                )
+                .order_by(
+                    # 区間一致を優先、その後 start_date/end_date のNULLを最後にしつつ新しい順
+                    (ExpertCareer.end_date.is_(None)).asc(),
+                    ExpertCareer.end_date.desc(),
+                    (ExpertCareer.start_date.is_(None)).asc(),
+                    ExpertCareer.start_date.desc(),
+                )
+                .first()
+            )
+            if career:
+                career_rows.append((d, career.company_name, career.department_name, career.title))
+
+    # Expert テーブルからの直接属性（fallback 用）
+    expert_row = db.query(Expert).filter(Expert.id == expert_id).first()
+    expert_company_name = None
+    if expert_row and expert_row.company_id:
+        comp = db.query(Company).filter(Company.id == expert_row.company_id).first()
+        if comp:
+            expert_company_name = comp.name
+
+    date_to_career = {d: {"company": c, "dept": dep, "title": t} for d, c, dep, t in career_rows}
+
     # meetings を meeting_id ごとにまとめ、participants 配列を構築
     meetings_by_id = {}
     for row in meetings:
@@ -133,7 +182,20 @@ def get_expert_insights(db: Session, expert_id: str):
                 "evaluation": row.evaluation,
                 "stance": row.stance,
                 "participants": [],
+                "expert_company_name": None,
+                "expert_department_name": None,
+                "expert_title": None,
             }
+        # その会議日のキャリア情報を付与（なければ Expert テーブルの属性をfallback）
+        career_info = date_to_career.get(row.meeting_date)
+        if career_info:
+            meetings_by_id[key]["expert_company_name"] = career_info["company"]
+            meetings_by_id[key]["expert_department_name"] = career_info["dept"]
+            meetings_by_id[key]["expert_title"] = career_info["title"]
+        elif expert_row:
+            meetings_by_id[key]["expert_company_name"] = expert_company_name
+            meetings_by_id[key]["expert_department_name"] = expert_row.department
+            meetings_by_id[key]["expert_title"] = expert_row.title
         dept = None
         ud = departments_map.get(row.user_id)
         if ud:
