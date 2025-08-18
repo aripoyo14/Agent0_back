@@ -74,7 +74,7 @@ class MeetingOverviewOut(BaseModel):
     minutes_url: str | None = None
     evaluation: int | None = None
     stance: int | None = None
-    participants: list[MeetingParticipantOut] = []
+    participants: list[MeetingParticipantOut] = Field(default_factory=list)
     expert_company_name: str | None = None
     expert_department_name: str | None = None
     expert_title: str | None = None
@@ -99,7 +99,7 @@ class ExpertInsightsOut(BaseModel):
     company_id: str | None = None
     company_name: str | None = None
     department: str | None = None
-    email: EmailStr | None = None
+    email: str | None = None
     mobile: str | None = None
     title: str | None = None
     meetings: list[MeetingOverviewOut]
