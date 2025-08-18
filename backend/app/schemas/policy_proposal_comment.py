@@ -94,3 +94,8 @@ class PolicyProposalCommentListResponse(BaseModel):
 
     latest_commented_at: Optional[datetime] = None
     total_comments: int
+
+# コメント数取得API用スキーマ
+class PolicyProposalCommentsCountResponse(BaseModel):
+    policy_proposal_id: str
+    comment_count: int
