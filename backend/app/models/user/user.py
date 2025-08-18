@@ -72,3 +72,91 @@ class User(Base):
     # リレーション
     organized_meetings = relationship("Meeting", back_populates="organizer")
     meeting_participations = relationship("MeetingUser", back_populates="user")
+
+    # 暗号化機能の追加
+    def _get_encryption_service(self):
+        """暗号化サービスを遅延インポートで取得"""
+        from app.core.security.encryption import encryption_service
+        return encryption_service
+
+    # 暗号化されたデータの復号化メソッド
+    def get_decrypted_email(self) -> str:
+        """暗号化されたメールアドレスを復号化して返す"""
+        if self.email:
+            try:
+                encryption_service = self._get_encryption_service()
+                return encryption_service.decrypt_data(self.email)
+            except Exception:
+                # 復号化に失敗した場合（古いデータなど）はそのまま返す
+                return self.email
+        return ""
+
+    def get_decrypted_extension(self) -> str:
+        """暗号化された内線番号を復号化して返す"""
+        if self.extension:
+            try:
+                encryption_service = self._get_encryption_service()
+                return encryption_service.decrypt_data(self.extension)
+            except Exception:
+                return self.extension
+        return ""
+
+    def get_decrypted_direct_phone(self) -> str:
+        """暗号化された直通番号を復号化して返す"""
+        if self.direct_phone:
+            try:
+                encryption_service = self._get_encryption_service()
+                return encryption_service.decrypt_data(self.direct_phone)
+            except Exception:
+                return self.direct_phone
+        return ""
+
+    def get_decrypted_mfa_totp_secret(self) -> str:
+        """暗号化されたMFA秘密鍵を復号化して返す"""
+        if self.mfa_totp_secret:
+            try:
+                encryption_service = self._get_encryption_service()
+                return encryption_service.decrypt_data(self.mfa_totp_secret)
+            except Exception:
+                return self.mfa_totp_secret
+        return ""
+
+    def get_decrypted_mfa_backup_codes(self) -> List[str]:
+        """暗号化されたMFAバックアップコードを復号化して返す"""
+        if self.mfa_backup_codes:
+            try:
+                encryption_service = self._get_encryption_service()
+                # JSONデータの場合は個別に復号化
+                decrypted_codes = []
+                for code in self.mfa_backup_codes:
+                    if isinstance(code, str):
+                        decrypted_codes.append(encryption_service.decrypt_data(code))
+                    else:
+                        decrypted_codes.append(str(code))
+                return decrypted_codes
+            except Exception:
+                return self.mfa_backup_codes
+        return []
+
+    # 暗号化メソッド（新規データ保存時用）
+    def encrypt_sensitive_data(self):
+        """機密データを暗号化する"""
+        encryption_service = self._get_encryption_service()
+        
+        if self.email:
+            self.email = encryption_service.encrypt_data(self.email)
+        if self.extension:
+            self.extension = encryption_service.encrypt_data(self.extension)
+        if self.direct_phone:
+            self.direct_phone = encryption_service.encrypt_data(self.direct_phone)
+        if self.mfa_totp_secret:
+            self.mfa_totp_secret = encryption_service.encrypt_data(self.mfa_totp_secret)
+        if self.mfa_backup_codes:
+            # バックアップコードの配列を個別に暗号化
+            encrypted_codes = []
+            for code in self.mfa_backup_codes:
+                if isinstance(code, str):
+                    encrypted_codes.append(encryption_service.encrypt_data(code))
+                else:
+                    encrypted_codes.append(str(code))
+            self.mfa_backup_codes = encrypted_codes

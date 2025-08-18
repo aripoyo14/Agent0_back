@@ -47,14 +47,22 @@ def create_expert(db: Session, expert_in: ExpertCreate, password_hash: str):
     
     expert = Expert(
         id=str(uuid4()),
-        sansan_person_id=None,
+        sansan_person_id=expert_in.sansan_person_id,
         last_name=expert_in.last_name,
         first_name=expert_in.first_name,
         company_id=company.id,
         department=expert_in.department,
+        title=expert_in.title,
         email=expert_in.email,
         password_hash=password_hash,
+        mobile=expert_in.mobile,
+        contact_frequency=expert_in.contact_frequency,
+        memo=expert_in.memo,
+        business_card_image_url=expert_in.business_card_image_url,
     )
+
+    # 機密データを暗号化
+    expert.encrypt_sensitive_data()
 
     db.add(expert)
     # ここでコミットしない！
@@ -62,9 +70,20 @@ def create_expert(db: Session, expert_in: ExpertCreate, password_hash: str):
     # db.refresh(expert)  # ← この行も削除
     return expert
 
-# メールアドレスでexpertを検索する関数
+# 暗号化されたメールアドレスでexpertを検索する関数
 def get_expert_by_email(db: Session, email: str):
-    return db.query(Expert).filter(Expert.email == email).first()
+    """暗号化されたメールアドレスでエキスパートを検索"""
+    # 全エキスパートを取得して、復号化して比較
+    experts = db.query(Expert).all()
+    for expert in experts:
+        try:
+            decrypted_email = expert.get_decrypted_email()
+            if decrypted_email == email:
+                return expert
+        except Exception:
+            # 復号化に失敗した場合はスキップ
+            continue
+    return None
 
 
 def get_expert_insights(db: Session, expert_id: str):
@@ -343,3 +362,56 @@ def get_expert_insights(db: Session, expert_id: str):
         "evaluation_average": evaluation_average,
         "stance_average": stance_average,
     }
+
+def search_experts_by_encrypted_field(db: Session, field_name: str, search_value: str):
+    """暗号化されたフィールドでエキスパートを検索"""
+    experts = db.query(Expert).all()
+    matching_experts = []
+    
+    for expert in experts:
+        try:
+            if field_name == "email":
+                decrypted_value = expert.get_decrypted_email()
+            elif field_name == "mobile":
+                decrypted_value = expert.get_decrypted_mobile()
+            elif field_name == "memo":
+                decrypted_value = expert.get_decrypted_memo()
+            elif field_name == "sansan_person_id":
+                decrypted_value = expert.get_decrypted_sansan_person_id()
+            else:
+                continue
+            
+            if search_value.lower() in decrypted_value.lower():
+                matching_experts.append(expert)
+                
+        except Exception:
+            # 復号化に失敗した場合はスキップ
+            continue
+    
+    return matching_experts
+
+def get_experts_by_company_and_department(db: Session, company_name: str = None, department: str = None):
+    """会社名と部署でエキスパートを検索（暗号化対応）"""
+    query = db.query(Expert)
+    
+    if company_name:
+        # 会社名での検索はCompanyテーブルをJOIN
+        query = query.join(Company, Expert.company_id == Company.id)
+        query = query.filter(Company.name.ilike(f"%{company_name}%"))
+    
+    if department:
+        # 部署での検索は暗号化されたフィールドを復号化して比較
+        experts = query.all()
+        matching_experts = []
+        
+        for expert in experts:
+            try:
+                decrypted_department = expert.department
+                if decrypted_department and department.lower() in decrypted_department.lower():
+                    matching_experts.append(expert)
+            except Exception:
+                continue
+        
+        return matching_experts
+    
+    return query.all()

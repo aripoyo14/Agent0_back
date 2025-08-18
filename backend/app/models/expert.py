@@ -6,6 +6,8 @@ from sqlalchemy.dialects.mysql import CHAR, DECIMAL
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.db.base_class import Base
+# 循環インポートを避けるため、遅延インポートに変更
+# from app.core.security.encryption import encryption_service
 import uuid
 
 JST = timezone(timedelta(hours=9))
@@ -57,7 +59,106 @@ class Expert(Base):
 
     # 名刺画像関連のカラムを追加
     business_card_image_url = Column(String(500), nullable=True, comment="名刺画像のURL")
-    
+
+    def _get_encryption_service(self):
+        """暗号化サービスを遅延インポートで取得"""
+        from app.core.security.encryption import encryption_service
+        return encryption_service
+
+    # 暗号化されたデータの復号化メソッド
+    def get_decrypted_email(self) -> str:
+        """暗号化されたメールアドレスを復号化して返す"""
+        if self.email:
+            try:
+                encryption_service = self._get_encryption_service()
+                return encryption_service.decrypt_data(self.email)
+            except Exception:
+                # 復号化に失敗した場合（古いデータなど）はそのまま返す
+                return self.email
+        return ""
+
+    def get_decrypted_mobile(self) -> str:
+        """暗号化された携帯電話番号を復号化して返す"""
+        if self.mobile:
+            try:
+                encryption_service = self._get_encryption_service()
+                return encryption_service.decrypt_data(self.mobile)
+            except Exception:
+                return self.mobile
+        return ""
+
+    def get_decrypted_memo(self) -> str:
+        """暗号化されたメモを復号化して返す"""
+        if self.memo:
+            try:
+                encryption_service = self._get_encryption_service()
+                return encryption_service.decrypt_data(self.memo)
+            except Exception:
+                return self.memo
+        return ""
+
+    def get_decrypted_mfa_totp_secret(self) -> str:
+        """暗号化されたMFA秘密鍵を復号化して返す"""
+        if self.mfa_totp_secret:
+            try:
+                encryption_service = self._get_encryption_service()
+                return encryption_service.decrypt_data(self.mfa_totp_secret)
+            except Exception:
+                return self.mfa_totp_secret
+        return ""
+
+    def get_decrypted_mfa_backup_codes(self) -> List[str]:
+        """暗号化されたMFAバックアップコードを復号化して返す"""
+        if self.mfa_backup_codes:
+            try:
+                encryption_service = self._get_encryption_service()
+                # JSONデータの場合は個別に復号化
+                decrypted_codes = []
+                for code in self.mfa_backup_codes:
+                    if isinstance(code, str):
+                        decrypted_codes.append(encryption_service.decrypt_data(code))
+                    else:
+                        decrypted_codes.append(str(code))
+                return decrypted_codes
+            except Exception:
+                return self.mfa_backup_codes
+        return []
+
+    def get_decrypted_sansan_person_id(self) -> str:
+        """暗号化されたSanSan個人IDを復号化して返す"""
+        if self.sansan_person_id:
+            try:
+                encryption_service = self._get_encryption_service()
+                return encryption_service.decrypt_data(self.sansan_person_id)
+            except Exception:
+                return self.sansan_person_id
+        return ""
+
+    # 暗号化メソッド（新規データ保存時用）
+    def encrypt_sensitive_data(self):
+        """機密データを暗号化する"""
+        encryption_service = self._get_encryption_service()
+        
+        if self.email:
+            self.email = encryption_service.encrypt_data(self.email)
+        if self.mobile:
+            self.mobile = encryption_service.encrypt_data(self.mobile)
+        if self.memo:
+            self.memo = encryption_service.encrypt_data(self.memo)
+        if self.mfa_totp_secret:
+            self.mfa_totp_secret = encryption_service.encrypt_data(self.mfa_totp_secret)
+        if self.mfa_backup_codes:
+            # バックアップコードの配列を個別に暗号化
+            encrypted_codes = []
+            for code in self.mfa_backup_codes:
+                if isinstance(code, str):
+                    encrypted_codes.append(encryption_service.encrypt_data(code))
+                else:
+                    encrypted_codes.append(str(code))
+            self.mfa_backup_codes = encrypted_codes
+        if self.sansan_person_id:
+            self.sansan_person_id = encryption_service.encrypt_data(self.sansan_person_id)
+
 # 人脈マップ作成時に変わっていた（いったんコメントアウト）
 # class Expert(Base):
 #     """
