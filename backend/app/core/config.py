@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     secret_key: str = Field(default="your-secret-key-here-make-it-long-and-secure", alias="SECRET_KEY")
     algorithm: str = Field(default="HS256", alias="ALGORITHM")
     access_token_expire_minutes: int = Field(default=30, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
+    
+    # 暗号化
+    encryption_key: str = Field(default="Q1VxcEVvTlRfN3FJSU13ZGNUckxwTUFtTVVVVk11Ni04M2tmQ2o0WGQ1bz0", alias="ENCRYPTION_KEY")
 
     # 外部API
     openai_api_key: str = Field(default="your-openai-api-key-here", alias="OPENAI_API_KEY")

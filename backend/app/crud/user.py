@@ -38,11 +38,14 @@ def create_user(db: Session, user_in: UserCreate, password_hash: str) -> User:
         updated_at=datetime.now(JST)
     )
 
-    # 3. ユーザー情報をDBに保存
+    # 3. 機密データを暗号化
+    user.encrypt_sensitive_data()
+
+    # 4. ユーザー情報をDBに保存
     db.add(user)
     db.flush()  # user.id を得るため（コミットはしない）
 
-    # 4. 部署との中間テーブルに登録
+    # 5. 部署との中間テーブルに登録
     db.execute(
         UsersDepartments.__table__.insert().values(
             user_id=user.id,
@@ -50,7 +53,7 @@ def create_user(db: Session, user_in: UserCreate, password_hash: str) -> User:
         )
     )
 
-    # ５. 役職との中間テーブルに登録
+    # 6. 役職との中間テーブルに登録
     db.execute(
         UsersPositions.__table__.insert().values(
             user_id=user.id,
@@ -63,6 +66,54 @@ def create_user(db: Session, user_in: UserCreate, password_hash: str) -> User:
     
     return user
 
-# メールアドレスでユーザーを検索する関数
+# 暗号化されたメールアドレスでユーザーを検索する関数
 def get_user_by_email(db: Session, email: str):
-    return db.query(User).filter(User.email == email).first()
+    """暗号化されたメールアドレスでユーザーを検索"""
+    # 全ユーザーを取得して、復号化して比較
+    users = db.query(User).all()
+    for user in users:
+        try:
+            decrypted_email = user.get_decrypted_email()
+            if decrypted_email == email:
+                return user
+        except Exception:
+            # 復号化に失敗した場合はスキップ
+            continue
+    return None
+
+# 暗号化されたデータでの検索ヘルパー関数
+def search_users_by_encrypted_field(db: Session, field_name: str, search_value: str):
+    """暗号化されたフィールドでユーザーを検索"""
+    users = db.query(User).all()
+    matching_users = []
+    
+    for user in users:
+        try:
+            if field_name == "email":
+                decrypted_value = user.get_decrypted_email()
+            elif field_name == "extension":
+                decrypted_value = user.get_decrypted_extension()
+            elif field_name == "direct_phone":
+                decrypted_value = user.get_decrypted_direct_phone()
+            else:
+                continue
+            
+            if search_value.lower() in decrypted_value.lower():
+                matching_users.append(user)
+                
+        except Exception:
+            # 復号化に失敗した場合はスキップ
+            continue
+    
+    return matching_users
+
+# 既存ユーザーの機密データを暗号化する関数
+def encrypt_existing_user_data(db: Session, user_id: str):
+    """既存ユーザーの機密データを暗号化"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if user:
+        user.encrypt_sensitive_data()
+        db.add(user)
+        db.commit()
+        return True
+    return False
