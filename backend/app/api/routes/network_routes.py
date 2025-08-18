@@ -5,7 +5,7 @@ from sqlalchemy import text
 from typing import List, Dict, Tuple
 from math import exp
 
-from app.api.deps import get_db
+from app.db.session import get_db
 from app.schemas.network import NetworkRouteRequest, NetworkRouteResponse, NetworkRoute, RouteHop, RouteBreakdown
 
 
