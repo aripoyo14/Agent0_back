@@ -62,7 +62,8 @@ def create_comment(db: Session, comment_in: PolicyProposalCommentCreate) -> Poli
     db.commit()
     db.refresh(comment)
 
-    # 5. 登録済コメントを返却
+    # 5. 投稿者名を設定して返却
+    comment = get_comment_by_id(db, comment.id)
     return comment
 
 def create_reply(
@@ -108,20 +109,61 @@ def create_reply(
     db.add(reply)
     db.commit()
     db.refresh(reply)
+    
+    # 投稿者名を設定して返却
+    reply = get_comment_by_id(db, reply.id)
     return reply
 
 def get_comment_by_id(db: Session, comment_id: str) -> Optional[PolicyProposalComment]:
     """
     コメントID（UUID文字列）で単一取得。論理削除は除外。
+    投稿者名（author_name）も含めて取得。
     """
-    return (
-        db.query(PolicyProposalComment)
+    from sqlalchemy import case, func
+    from app.models.user.user import User
+    from app.models.expert import Expert
+    
+    # 投稿者名を取得するためのサブクエリ
+    author_name_subquery = (
+        db.query(
+            PolicyProposalComment.id,
+            case(
+                (PolicyProposalComment.author_type.in_(['admin', 'staff']), 
+                 func.concat(User.last_name, ' ', User.first_name)),
+                (PolicyProposalComment.author_type == 'contributor', 
+                 func.concat(Expert.last_name, ' ', Expert.first_name)),
+                else_=None
+            ).label('author_name')
+        )
+        .outerjoin(User, 
+                   (PolicyProposalComment.author_id == User.id) & 
+                   (PolicyProposalComment.author_type.in_(['admin', 'staff'])))
+        .outerjoin(Expert, 
+                   (PolicyProposalComment.author_id == Expert.id) & 
+                   (PolicyProposalComment.author_type == 'contributor'))
+        .subquery()
+    )
+    
+    # メインクエリ：コメントと投稿者名を結合
+    result = (
+        db.query(
+            PolicyProposalComment,
+            author_name_subquery.c.author_name
+        )
+        .join(author_name_subquery, PolicyProposalComment.id == author_name_subquery.c.id)
         .filter(
             PolicyProposalComment.id == comment_id,
             PolicyProposalComment.is_deleted == False,
         )
         .first()
     )
+    
+    if result:
+        comment, author_name = result
+        comment.author_name = author_name
+        return comment
+    
+    return None
 
 def list_comments_by_policy_proposal_id(
     db: Session,
@@ -133,9 +175,40 @@ def list_comments_by_policy_proposal_id(
     """
     政策案ID（文字列）に紐づくコメント一覧を新しい順で取得。
     論理削除は除外。簡易ページング対応。
+    投稿者名（author_name）も含めて取得。
     """
-    return (
-        db.query(PolicyProposalComment)
+    from sqlalchemy import case, func
+    from app.models.user.user import User
+    from app.models.expert import Expert
+    
+    # 投稿者名を取得するためのサブクエリ
+    author_name_subquery = (
+        db.query(
+            PolicyProposalComment.id,
+            case(
+                (PolicyProposalComment.author_type.in_(['admin', 'staff']), 
+                 func.concat(User.last_name, ' ', User.first_name)),
+                (PolicyProposalComment.author_type == 'contributor', 
+                 func.concat(Expert.last_name, ' ', Expert.first_name)),
+                else_=None
+            ).label('author_name')
+        )
+        .outerjoin(User, 
+                   (PolicyProposalComment.author_id == User.id) & 
+                   (PolicyProposalComment.author_type.in_(['admin', 'staff'])))
+        .outerjoin(Expert, 
+                   (PolicyProposalComment.author_id == Expert.id) & 
+                   (PolicyProposalComment.author_type == 'contributor'))
+        .subquery()
+    )
+    
+    # メインクエリ：コメントと投稿者名を結合
+    comments = (
+        db.query(
+            PolicyProposalComment,
+            author_name_subquery.c.author_name
+        )
+        .join(author_name_subquery, PolicyProposalComment.id == author_name_subquery.c.id)
         .filter(
             PolicyProposalComment.policy_proposal_id == policy_proposal_id,
             PolicyProposalComment.is_deleted == False,
@@ -145,6 +218,14 @@ def list_comments_by_policy_proposal_id(
         .limit(limit)
         .all()
     )
+    
+    # 結果をPolicyProposalCommentオブジェクトに変換し、author_nameを設定
+    result = []
+    for comment, author_name in comments:
+        comment.author_name = author_name
+        result.append(comment)
+    
+    return result
 
 # 追加機能：指定ユーザーが投稿した政策案に紐づくコメント一覧を取得
 def list_comments_for_policies_by_user(
@@ -171,10 +252,36 @@ def list_comments_for_policies_by_user(
 
     results: List[PolicyWithComments] = []
 
-    # 2. 各政策案に紐づくコメントを取得
+    # 2. 各政策案に紐づくコメントを取得（投稿者名付き）
     for policy in policies:
-        comments = (
-            db.query(PolicyProposalComment)
+        # 投稿者名を取得するためのサブクエリ
+        author_name_subquery = (
+            db.query(
+                PolicyProposalComment.id,
+                case(
+                    (PolicyProposalComment.author_type.in_(['admin', 'staff']), 
+                     func.concat(User.last_name, ' ', User.first_name)),
+                    (PolicyProposalComment.author_type == 'contributor', 
+                     func.concat(Expert.last_name, ' ', Expert.first_name)),
+                    else_=None
+                ).label('author_name')
+            )
+            .outerjoin(User, 
+                       (PolicyProposalComment.author_id == User.id) & 
+                       (PolicyProposalComment.author_type.in_(['admin', 'staff'])))
+            .outerjoin(Expert, 
+                       (PolicyProposalComment.author_id == Expert.id) & 
+                       (PolicyProposalComment.author_type == 'contributor'))
+            .subquery()
+        )
+        
+        # メインクエリ：コメントと投稿者名を結合
+        comments_with_names = (
+            db.query(
+                PolicyProposalComment,
+                author_name_subquery.c.author_name
+            )
+            .join(author_name_subquery, PolicyProposalComment.id == author_name_subquery.c.id)
             .filter(
                 PolicyProposalComment.policy_proposal_id == str(policy.id),
                 PolicyProposalComment.is_deleted == False,
@@ -182,6 +289,12 @@ def list_comments_for_policies_by_user(
             .order_by(PolicyProposalComment.posted_at.desc())
             .all()
         )
+        
+        # 結果をPolicyProposalCommentオブジェクトに変換し、author_nameを設定
+        comments = []
+        for comment, author_name in comments_with_names:
+            comment.author_name = author_name
+            comments.append(comment)
 
         # 3. 最新コメント日時の取得
         latest_commented_at = (
@@ -246,6 +359,9 @@ def update_comment_rating(
     
     db.commit()
     db.refresh(comment)
+    
+    # 投稿者名を設定して返却
+    comment = get_comment_by_id(db, comment.id)
     return comment
 
 # コメント数取得関数

@@ -72,3 +72,6 @@ class PolicyProposalComment(Base):
             name="check_stance_range"
         ),
     )
+    
+    # 投稿者名（動的に生成されるフィールド）
+    author_name = None
