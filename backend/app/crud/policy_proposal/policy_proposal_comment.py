@@ -247,3 +247,27 @@ def update_comment_rating(
     db.commit()
     db.refresh(comment)
     return comment
+
+# コメント数取得関数
+def get_comment_count_by_policy_proposal(db: Session, policy_proposal_id: str) -> int:
+    """
+    特定の政策提案に対するPolicyProposalComments数を取得する。
+    
+    Args:
+        db: Database session
+        policy_proposal_id: 政策提案ID
+        
+    Returns:
+        int: その政策提案に対するコメント数
+    """
+    # コメント数（論理削除を除く）
+    comment_count = (
+        db.query(func.count(PolicyProposalComment.id))
+        .filter(
+            PolicyProposalComment.policy_proposal_id == policy_proposal_id,
+            PolicyProposalComment.is_deleted == False
+        )
+        .scalar()
+    ) or 0
+    
+    return comment_count
