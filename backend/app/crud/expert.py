@@ -325,8 +325,30 @@ def get_expert_insights(db: Session, expert_id: str):
     expert_title_header = None
     if expert_row:
         expert_display_name = f"{expert_row.last_name} {expert_row.first_name}" if (expert_row.last_name or expert_row.first_name) else None
-        expert_email = expert_row.email
-        expert_mobile = expert_row.mobile
+        # 復号化して返却（EmailStr 検証エラー回避）
+        try:
+            expert_email = expert_row.get_decrypted_email()
+        except Exception:
+            expert_email = expert_row.email
+        # 無効なメール形式は None にフォールバック（EmailStr | None を満たす）
+        if not expert_email or '@' not in str(expert_email):
+            expert_email = None
+        raw_mobile = expert_row.mobile
+        try:
+            expert_mobile = expert_row.get_decrypted_mobile()
+        except Exception:
+            expert_mobile = None
+        # 暗号化トークンの典型的な先頭（Fernet）を検出したら None にフォールバック
+        def _looks_encrypted(val: str) -> bool:
+            return isinstance(val, str) and val.startswith("gAAAAA")
+        if expert_mobile and _looks_encrypted(expert_mobile):
+            expert_mobile = None
+        # 復号結果が空/None かつ元値が暗号化らしければ None、それ以外は元値を採用
+        if not expert_mobile:
+            if raw_mobile and _looks_encrypted(raw_mobile):
+                expert_mobile = None
+            else:
+                expert_mobile = raw_mobile
         expert_department = expert_row.department
         expert_company_id = expert_row.company_id
         expert_company_name_for_header = expert_company_name

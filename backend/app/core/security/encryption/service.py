@@ -19,18 +19,15 @@ class EncryptionService:
         key_env = os.getenv("ENCRYPTION_KEY")
         if key_env:
             try:
-                # 既存のキーを正しい形式に変換
-                if len(key_env) == 44:  # 現在のキー形式
-                    # 32バイトのキーを生成
-                    key = Fernet.generate_key()
-                    print(f"⚠️  既存のキー形式が不正です。新しい暗号化キーを生成しました: {key.decode()}")
-                    return key
+                # Fernetキーは urlsafe base64 エンコードされた32バイト（44文字）
+                if len(key_env) == 44:
+                    # 期待通りの形式なのでそのまま使用
+                    return key_env.encode()
                 else:
-                    # 正しい形式のキー
-                    return base64.urlsafe_b64decode(key_env)
+                    # 想定外の形式の場合はエラーにして新規生成にフォールバック
+                    raise ValueError("Invalid ENCRYPTION_KEY format")
             except Exception as e:
-                print(f"⚠️  既存のキー形式が不正です: {str(e)}")
-                # 新しいキーを生成
+                print(f"⚠️  ENCRYPTION_KEY の形式が不正です: {str(e)}")
                 key = Fernet.generate_key()
                 print(f"⚠️  新しい暗号化キーを生成しました: {key.decode()}")
                 return key
