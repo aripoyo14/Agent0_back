@@ -6,10 +6,12 @@
 
 from typing import Optional, List
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
 from fastapi import HTTPException, status
 from datetime import datetime, timezone, timedelta
 
 from app.models.policy_proposal.policy_proposal import PolicyProposal
+from app.models.policy_proposal.policy_proposal_comment import PolicyProposalComment
 from app.schemas.policy_proposal.policy_proposal import ProposalCreate
 from app.models.policy_proposal.policy_proposal_attachments import PolicyProposalAttachment
 
@@ -140,3 +142,46 @@ def list_proposals(
         .all()
     )
     return rows
+
+
+def get_user_submissions(
+    db: Session,
+    user_id: str,
+    *,
+    offset: int = 0,
+    limit: int = 20,
+) -> List[dict]:
+    """
+    ログインユーザーが投稿した政策提案の一覧を取得する関数。
+    各投稿のコメント数も含めて返す。
+    """
+    proposals = (
+        db.query(PolicyProposal)
+        .options(
+            joinedload(PolicyProposal.attachments),
+            joinedload(PolicyProposal.policy_tags)
+        )
+        .filter(PolicyProposal.published_by_user_id == user_id)
+        .order_by(PolicyProposal.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    
+    results = []
+    for proposal in proposals:
+        comment_count = (
+            db.query(func.count(PolicyProposalComment.id))
+            .filter(
+                PolicyProposalComment.policy_proposal_id == str(proposal.id),
+                PolicyProposalComment.is_deleted == False
+            )
+            .scalar()
+        ) or 0
+        
+        result = {
+            "proposal": proposal,
+            "comment_count": comment_count
+        }
+        results.append(result)
+    return results

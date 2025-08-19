@@ -7,6 +7,9 @@ from uuid import UUID
 # 投稿ステータスを定義
 PolicyStatus = Literal["draft", "published", "archived"]
 
+# 投稿履歴用ステータス定義
+PolicySubmissionStatus = Literal["draft", "submitted", "under_review", "approved", "rejected"]
+
 # 政策タグ用スキーマ
 class PolicyTagOut(BaseModel):
     id: int
@@ -18,6 +21,61 @@ class PolicyTagOut(BaseModel):
     model_config = {
         "from_attributes": True
     }
+
+# 投稿履歴用スキーマ
+class PolicySubmissionHistory(BaseModel):
+    id: UUID
+    title: str
+    content: str
+    policy_themes: List[str] | None = None
+    submitted_at: datetime
+    status: PolicySubmissionStatus
+    attached_files: List[dict] | None = None
+    comment_count: int = 0
+
+    model_config = {
+        "from_attributes": True
+    }
+
+    @classmethod
+    def from_proposal_with_comment_count(cls, proposal, comment_count: int = 0):
+        """
+        政策提案オブジェクトから投稿履歴用オブジェクトを作成
+        コメント数も含めて適切にマッピングする
+        """
+        # ステータスの変換
+        status_mapping = {
+            "draft": "draft",
+            "published": "submitted",
+            "archived": "rejected"
+        }
+        mapped_status = status_mapping.get(proposal.status, "draft")
+        
+        # 基本情報
+        data = {
+            "id": proposal.id,
+            "title": proposal.title,
+            "content": proposal.body,
+            "policy_themes": [tag.name for tag in proposal.policy_tags] if hasattr(proposal, 'policy_tags') and proposal.policy_tags else None,
+            "submitted_at": proposal.created_at,
+            "status": mapped_status,
+            "comment_count": comment_count,
+        }
+        
+        # 添付ファイル情報
+        if hasattr(proposal, 'attachments') and proposal.attachments:
+            data["attached_files"] = [
+                {
+                    "id": str(att.id),
+                    "file_name": att.file_name,
+                    "file_url": att.file_url
+                }
+                for att in proposal.attachments
+            ]
+        else:
+            data["attached_files"] = None
+            
+        return cls(**data)
 
 # 政策案新規登録用スキーマ
 class ProposalCreate(BaseModel):
