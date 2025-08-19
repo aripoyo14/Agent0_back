@@ -6,12 +6,13 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, Request, status
 from sqlalchemy.orm import Session
-from app.schemas.policy_proposal.policy_proposal import ProposalCreate, ProposalOut, AttachmentOut
+from app.schemas.policy_proposal.policy_proposal import ProposalCreate, ProposalOut, AttachmentOut, PolicySubmissionHistory
 from app.schemas.policy_proposal_comment import PolicyProposalCommentResponse
-from app.crud.policy_proposal.policy_proposal import create_proposal, create_attachment, get_proposal, list_proposals
+from app.crud.policy_proposal.policy_proposal import create_proposal, create_attachment, get_proposal, list_proposals, get_user_submissions
 from app.models.policy_proposal.policy_proposal_attachments import PolicyProposalAttachment
 from app.db.session import SessionLocal
 from app.core.blob import upload_binary_to_blob
+from app.core.dependencies import get_current_user
 from uuid import UUID, uuid4
 import os
 
@@ -139,6 +140,93 @@ def get_policy_proposals(
     """
     rows = list_proposals(db=db, status_filter=status, q=q, offset=offset, limit=limit)
     return [ProposalOut.from_proposal_with_relations(proposal) for proposal in rows]
+
+
+# 投稿履歴取得エンドポイント
+@router.get("/my-submissions", response_model=dict)
+def get_my_submissions(
+    offset: int = Query(0, ge=0, description="スキップ件数"),
+    limit: int = Query(20, ge=1, le=100, description="取得件数"),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    ログインユーザーが投稿した政策提案の履歴を取得する。
+    
+    ## 機能
+    - ログインユーザーが投稿した政策提案の一覧を取得
+    - 各投稿のコメント数も含めて返却
+    - 投稿日時の降順でソート
+    - ページング対応（limit/offset）
+    
+    ## パラメータ
+    - `offset`: スキップ件数（デフォルト: 0）
+    - `limit`: 取得件数（デフォルト: 20, 最大: 100）
+    
+    ## レスポンス
+    ```json
+    {
+        "success": true,
+        "data": [
+            {
+                "id": "uuid",
+                "title": "タイトル",
+                "content": "本文",
+                "policy_themes": ["テーマ1", "テーマ2"],
+                "submitted_at": "2024-01-01T00:00:00",
+                "status": "submitted",
+                "attached_files": [
+                    {
+                        "id": "uuid",
+                        "file_name": "ファイル名.pdf",
+                        "file_url": "https://..."
+                    }
+                ],
+                "comment_count": 5
+            }
+        ]
+    }
+    ```
+    
+    ## 使用例
+    ```
+    GET /api/policy-proposals/my-submissions?limit=10&offset=0
+    ```
+    """
+    try:
+        user_id = current_user.get("user_id")
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="ユーザーIDが取得できませんでした"
+            )
+        
+        submissions_data = get_user_submissions(
+            db=db,
+            user_id=user_id,
+            offset=offset,
+            limit=limit
+        )
+        
+        submissions = []
+        for submission in submissions_data:
+            proposal = submission["proposal"]
+            comment_count = submission["comment_count"]
+            submission_history = PolicySubmissionHistory.from_proposal_with_comment_count(
+                proposal=proposal,
+                comment_count=comment_count
+            )
+            submissions.append(submission_history)
+        
+        return {
+            "success": True,
+            "data": submissions
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"投稿履歴の取得に失敗しました: {str(e)}"
+        }
 
 
 # 政策案の詳細取得
