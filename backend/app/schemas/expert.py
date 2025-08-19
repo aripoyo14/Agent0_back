@@ -12,6 +12,11 @@ class ExpertCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
     business_card_image_url: Optional[str] = None
+    sansan_person_id: Optional[str] = None
+    title: Optional[str] = None
+    mobile: Optional[str] = None
+    contact_frequency: Optional[str] = None
+    memo: Optional[str] = None
 
 
 class ExpertOut(BaseModel):

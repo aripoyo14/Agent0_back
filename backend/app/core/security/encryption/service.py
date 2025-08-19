@@ -26,17 +26,11 @@ class EncryptionService:
                 else:
                     # 想定外の形式の場合はエラーにして新規生成にフォールバック
                     raise ValueError("Invalid ENCRYPTION_KEY format")
-            # 44文字のFernetキーはそのまま使う（再デコードしない）
-            if len(key_env) == 44:
-                return key_env.encode()
-            try:
-                return base64.urlsafe_b64decode(key_env)
             except Exception as e:
                 print(f"⚠️  ENCRYPTION_KEY の形式が不正です: {str(e)}")
                 key = Fernet.generate_key()
                 print(f"⚠️  新しい暗号化キーを生成しました: {key.decode()}")
                 return key
-                print(f"⚠️  環境変数の暗号化キー形式が不正です: {e}")
         
         # 環境変数がない場合、設定ファイルから取得
         try:
