@@ -180,6 +180,11 @@ def get_expert_profile(token: str = Depends(HTTPBearer()), db: Session = Depends
 @router.get("/{expert_id}/insights", response_model=ExpertInsightsOut)
 def get_insights(expert_id: str, db: Session = Depends(get_db)):
     try:
+        # 事前にエキスパートの存在を確認し、存在しない場合は404
+        expert_exists = db.query(Expert).filter(Expert.id == expert_id).first()
+        if not expert_exists:
+            raise HTTPException(status_code=404, detail="対象の外部有識者データが見つかりません")
+
         data = get_expert_insights(db, expert_id)
         if not data:
             raise HTTPException(status_code=404, detail="対象の外部有識者データが見つかりません")

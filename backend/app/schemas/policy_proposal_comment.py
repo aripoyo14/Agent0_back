@@ -20,6 +20,7 @@ class PolicyProposalCommentResponse(BaseModel):
     policy_proposal_id: UUID
     author_type: Literal["admin", "staff", "contributor", "viewer"]
     author_id: UUID
+    author_name: Optional[str] = None  # 投稿者名（姓 + 名）
     comment_text: str
     parent_comment_id: Optional[UUID]
     posted_at: datetime
@@ -94,3 +95,8 @@ class PolicyProposalCommentListResponse(BaseModel):
 
     latest_commented_at: Optional[datetime] = None
     total_comments: int
+
+# コメント数取得API用スキーマ
+class PolicyProposalCommentsCountResponse(BaseModel):
+    policy_proposal_id: str
+    comment_count: int

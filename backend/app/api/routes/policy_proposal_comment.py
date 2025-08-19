@@ -16,6 +16,7 @@ from app.schemas.policy_proposal_comment import (
     AIReplyRequest,
     CommentRatingCreate,
     CommentRatingResponse,
+    PolicyProposalCommentsCountResponse,
 )
 from app.crud.policy_proposal.policy_proposal_comment import (
     create_comment,
@@ -24,6 +25,7 @@ from app.crud.policy_proposal.policy_proposal_comment import (
     list_comments_for_policies_by_user,
     create_reply,
     update_comment_rating,
+    get_comment_count_by_policy_proposal,
 )
 from app.services.openai import generate_ai_reply
 from app.services.file_analyzer import extract_file_content
@@ -558,3 +560,48 @@ def list_attachments_for_comment(
         db, policy_proposal_id=str(comment.policy_proposal_id)
     )
     return rows
+
+# コメント数取得API
+@router.get("/policy-proposals/{policy_proposal_id}/comment-count", response_model=PolicyProposalCommentsCountResponse)
+def get_comment_count_by_policy_proposal_endpoint(
+    policy_proposal_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    特定の政策提案に対するPolicyProposalComments数を取得する。
+    
+    ## 機能
+    - 指定された政策提案に対するPolicyProposalComments数を取得
+    - 論理削除されたコメントは除外
+    
+    ## パラメータ
+    - `policy_proposal_id`: 政策提案ID（パスパラメータ）
+    
+    ## レスポンス
+    - `policy_proposal_id`: 政策提案ID
+    - `comment_count`: その政策提案に対するPolicyProposalComments数
+    
+    ## 使用例
+    ```
+    GET /api/policy-proposal-comments/policy-proposals/policy-001/comment-count
+    ```
+    
+    ## レスポンス例
+    ```json
+    {
+      "policy_proposal_id": "policy-001",
+      "comment_count": 157
+    }
+    ```
+    """
+    try:
+        comment_count = get_comment_count_by_policy_proposal(db, policy_proposal_id)
+        return {
+            "policy_proposal_id": policy_proposal_id,
+            "comment_count": comment_count
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"コメント数取得中にエラーが発生しました: {str(e)}"
+        )
