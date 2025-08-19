@@ -19,6 +19,10 @@ from app.models.expert import Expert
 from app.core.security.rbac.service import RBACService
 from app.core.security.rate_limit.dependencies import check_auth_login_rate_limit
 
+# 既存のインポートに追加
+from app.crud.user import get_user_by_email
+from app.crud.expert import get_expert_by_email
+
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 # User/ExpertログインAPI (ユーザー認証を行い、アクセストークン（JWT）を発行して返す)
@@ -38,26 +42,11 @@ def login_user(
     audit_service = AuditService(db)
 
     try:
-        # まずUserテーブルで検索（暗号化されたメールアドレスも考慮）
-        user = None
-        try:
-            # 平文のメールアドレスで検索
-            user = db.query(User).filter(User.email == request.email).first()
-            if not user:
-                # 暗号化されたメールアドレスで検索を試行
-                from app.core.security.encryption.service import encryption_service
-                encrypted_email = encryption_service.encrypt_data(request.email)
-                user = db.query(User).filter(User.email == encrypted_email).first()
-        except Exception as e:
-            print(f"⚠️ ユーザー検索エラー: {e}")
-            user = None
-            
-        print(f"🔍 User検索結果: {user is not None}")
-        if user:
-            print(f" Userテーブルでユーザー発見: {user.email}")
-            print(f"🔍 保存されているパスワードハッシュ: {user.password_hash[:20]}...")
-            
-            if verify_password(request.password, user.password_hash):
+        # 修正：暗号化されたメールアドレスでユーザーを検索
+        user = get_user_by_email(db, request.email)
+
+        # ユーザーが存在して、パスワードが正しい場合
+        if user and verify_password(request.password, user.password_hash):
                 print(f"✅ ユーザー認証成功: {user.email}")
 
                 # ユーザーの権限を取得
@@ -106,28 +95,13 @@ def login_user(
                     "user_type": "user",
                     "role": user.role
                 }
-            else:
-                print(f"❌ ユーザーパスワード検証失敗: {user.email}")
+        else:
+            print(f"❌ ユーザーパスワード検証失敗: {user.email}")
         
-        # 次にExpertテーブルで検索（暗号化されたメールアドレスも考慮）
-        expert = None
-        try:
-            # 平文のメールアドレスで検索
-            expert = db.query(Expert).filter(Expert.email == request.email).first()
-            if not expert:
-                # 暗号化されたメールアドレスで検索を試行
-                from app.core.security.encryption.service import encryption_service
-                encrypted_email = encryption_service.encrypt_data(request.email)
-                expert = db.query(Expert).filter(Expert.email == encrypted_email).first()
-        except Exception as e:
-            print(f"⚠️ Expert検索エラー: {e}")
-            expert = None
-            
-        print(f"🔍 Expert検索結果: {expert is not None}")
-        if expert:
-            print(f" Expertテーブルでユーザー発見: {expert.email}")
-            print(f"🔍 保存されているパスワードハッシュ: {expert.password_hash[:20]}...")
-            if verify_password(request.password, expert.password_hash):
+        # Userで見つからない場合、Expertテーブルで検索
+        if not user:
+            expert = get_expert_by_email(db, request.email)
+            if expert and verify_password(request.password, expert.password_hash):
 
                 # デバッグログを追加
                 print(f"🔍 Expert認証成功: {expert.email}")

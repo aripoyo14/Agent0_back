@@ -68,17 +68,34 @@ def create_user(db: Session, user_in: UserCreate, password_hash: str) -> User:
 
 # 暗号化されたメールアドレスでユーザーを検索する関数
 def get_user_by_email(db: Session, email: str):
-    """暗号化されたメールアドレスでユーザーを検索"""
-    # 全ユーザーを取得して、復号化して比較
-    users = db.query(User).all()
-    for user in users:
-        try:
-            decrypted_email = user.get_decrypted_email()
-            if decrypted_email == email:
-                return user
-        except Exception:
-            # 復号化に失敗した場合はスキップ
-            continue
+    """暗号化されたメールアドレスでユーザーを検索（最適化版）"""
+    # まず平文のメールアドレスで検索（既存の暗号化されていないデータ）
+    user = db.query(User).filter(User.email == email).first()
+    if user:
+        return user
+    
+    # 見つからない場合、暗号化されたデータを検索
+    # 全ユーザーを取得するのではなく、バッチ処理で検索
+    batch_size = 100
+    offset = 0
+    
+    while True:
+        users = db.query(User).offset(offset).limit(batch_size).all()
+        if not users:
+            break
+            
+        for user in users:
+            try:
+                # メールアドレスが暗号化されているかチェック
+                if user.email and user.email.startswith('gAAAAA'):
+                    decrypted_email = user.get_decrypted_email()
+                    if decrypted_email == email:
+                        return user
+            except Exception:
+                continue
+        
+        offset += batch_size
+    
     return None
 
 # 暗号化されたデータでの検索ヘルパー関数
