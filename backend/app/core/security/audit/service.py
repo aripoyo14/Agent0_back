@@ -34,38 +34,65 @@ class AuditService:
         if not self.config.AUDIT_ENABLED:
             return None
         
-        # リクエスト情報の抽出
-        ip_address = None
-        user_agent = None
-        
-        if request:
-            ip_address = self._get_client_ip(request)
-            user_agent = request.headers.get("user-agent")
-        
-        # 機密情報のマスキング
-        if details and self.config.AUDIT_MASK_SENSITIVE:
-            details = self._mask_sensitive_data(details)
-        
-        # 監査ログの作成
-        audit_log = AuditLog(
-            user_id=user_id,
-            user_type=user_type,
-            event_type=event_type,
-            resource=resource,
-            action=action,
-            success=success,
-            ip_address=ip_address,
-            user_agent=user_agent,
-            details=details,
-            session_id=session_id
-        )
-        
-        # データベースに保存
-        self.db.add(audit_log)
-        self.db.commit()
-        self.db.refresh(audit_log)
-        
-        return audit_log
+        try:
+            # リクエスト情報の抽出
+            ip_address = None
+            user_agent = None
+            
+            if request:
+                ip_address = self._get_client_ip(request)
+                user_agent = request.headers.get("user-agent")
+            
+            # 機密情報のマスキング
+            if details and self.config.AUDIT_MASK_SENSITIVE:
+                details = self._mask_sensitive_data(details)
+            
+            print(f"🔍 監査ログを作成中: {event_type}")
+            print(f"🔍 ユーザーID: {user_id}")
+            print(f"🔍 詳細: {details}")
+            
+            # 監査ログの作成
+            audit_log = AuditLog(
+                user_id=user_id,
+                user_type=user_type,
+                event_type=event_type,
+                resource=resource,
+                action=action,
+                success=success,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                details=details,
+                session_id=session_id
+            )
+            
+            print(f"🔍 監査ログオブジェクト作成完了: {audit_log.id}")
+            
+            # データベースに保存
+            self.db.add(audit_log)
+            print("🔍 データベースに追加完了")
+            
+            self.db.commit()
+            print("✅ コミット完了")
+            
+            self.db.refresh(audit_log)
+            print("🔍 リフレッシュ完了")
+            
+            return audit_log
+            
+        except Exception as e:
+            print(f"❌ 監査ログの保存でエラー: {e}")
+            print(f"❌ エラーの型: {type(e)}")
+            print(f"❌ エラーの詳細: {str(e)}")
+            
+            # データベースの状態を確認
+            try:
+                self.db.rollback()
+                print("✅ ロールバック完了")
+            except Exception as rollback_error:
+                print(f"❌ ロールバックでもエラー: {rollback_error}")
+            
+            # エラーを再発生させる
+            raise e
     
     def _get_client_ip(self, request: Request) -> str:
         """クライアントのIPアドレスを取得"""
