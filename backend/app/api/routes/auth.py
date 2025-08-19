@@ -96,7 +96,11 @@ def login_user(
                     "role": user.role
                 }
         else:
-            print(f"❌ ユーザーパスワード検証失敗: {user.email}")
+            # 修正: userがNoneの場合を考慮
+            if user:
+                print(f"❌ ユーザーパスワード検証失敗: {user.email}")
+            else:
+                print(f"❌ ユーザーが見つかりません: {request.email}")
         
         # Userで見つからない場合、Expertテーブルで検索
         if not user:
@@ -163,7 +167,11 @@ def login_user(
                     "role": expert.role
                 }
             else:
-                print(f"❌ Expertパスワード検証失敗: {expert.email}")
+                # 修正: expertがNoneの場合を考慮
+                if expert:
+                    print(f"❌ Expertパスワード検証失敗: {expert.email}")
+                else:
+                    print(f"❌ Expertが見つかりません: {request.email}")
         
         # どちらでも認証失敗
         print(f"❌ 認証失敗: {request.email}")

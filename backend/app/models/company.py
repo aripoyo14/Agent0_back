@@ -18,7 +18,7 @@ class Company(Base):
     # name = Column(String(255))
 #えんちゃんバージョン(認証トークン付きログイン機能追加)
     id = Column(CHAR(36), primary_key=True)
-    sansan_company_id = Column(String(255))
+    sansan_company_id = Column(String(255), nullable=True)
     name = Column(String(255), index=True)
 ############################################
     postal_code = Column(String(20))
