@@ -13,20 +13,29 @@ class EncryptionService:
     def __init__(self):
         self.key = self._get_or_generate_key()
         self.cipher_suite = Fernet(self.key)
-        print("✅ 暗号化サービスが有効化されました")
     
     def _get_or_generate_key(self) -> bytes:
-        """環境変数からキーを取得、なければ設定ファイルから取得"""
-        # 環境変数から取得を試行
+        """環境変数からキーを取得、なければ生成"""
         key_env = os.getenv("ENCRYPTION_KEY")
-        
         if key_env:
+            try:
+                # Fernetキーは urlsafe base64 エンコードされた32バイト（44文字）
+                if len(key_env) == 44:
+                    # 期待通りの形式なのでそのまま使用
+                    return key_env.encode()
+                else:
+                    # 想定外の形式の場合はエラーにして新規生成にフォールバック
+                    raise ValueError("Invalid ENCRYPTION_KEY format")
             # 44文字のFernetキーはそのまま使う（再デコードしない）
             if len(key_env) == 44:
                 return key_env.encode()
             try:
                 return base64.urlsafe_b64decode(key_env)
             except Exception as e:
+                print(f"⚠️  ENCRYPTION_KEY の形式が不正です: {str(e)}")
+                key = Fernet.generate_key()
+                print(f"⚠️  新しい暗号化キーを生成しました: {key.decode()}")
+                return key
                 print(f"⚠️  環境変数の暗号化キー形式が不正です: {e}")
         
         # 環境変数がない場合、設定ファイルから取得
@@ -40,27 +49,18 @@ class EncryptionService:
         except Exception as e:
             print(f"⚠️  設定ファイルからの暗号化キー取得に失敗: {e}")
         
-        # 最後の手段として新しいキーを生成
+        # 新しいキーを生成して環境変数に設定
         key = Fernet.generate_key()
-        print(f"⚠️  新しい暗号化キーを生成しました: {key.decode()}")
+        print(f"⚠️  新しい暗号化キーを生成しました。環境変数ENCRYPTION_KEYに設定してください: {key.decode()}")
         return key
     
     def encrypt_data(self, data: str) -> str:
         """データを暗号化"""
-        if not data:
-            return data
         return self.cipher_suite.encrypt(data.encode()).decode()
     
     def decrypt_data(self, encrypted_data: str) -> str:
         """データを復号化"""
-        if not encrypted_data:
-            return encrypted_data
-        try:
-            return self.cipher_suite.decrypt(encrypted_data.encode()).decode()
-        except Exception as e:
-            print(f"⚠️  復号化に失敗しました: {str(e)}")
-            # 復号化に失敗した場合（古いデータなど）はそのまま返す
-            return encrypted_data
+        return self.cipher_suite.decrypt(encrypted_data.encode()).decode()
     
     def encrypt_file(self, file_path: str) -> bytes:
         """ファイルを暗号化"""
