@@ -226,3 +226,6 @@ uploads/
 .mypy_cache/
 pytest_cache/
 *.db
+
+# Test scripts (開発・テスト用、本番環境には含めない)
+scripts/

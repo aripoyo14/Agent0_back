@@ -1,16 +1,23 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.schemas.summary import MatchRequest, NetworkMapResponseDTO
 from app.crud.experts_policy_tags import experts_policy_tags_crud
 from app.crud.policy_tag import policy_tag_crud
+from app.core.security.rate_limit.decorators import rate_limit_read_api
+from typing import Optional
 
 
 router = APIRouter(prefix="/search_network_map", tags=["Search Network Map"])
 
 
 @router.post("/match", response_model=NetworkMapResponseDTO)
-async def match(payload: MatchRequest, db: Session = Depends(get_db)):
+@rate_limit_read_api
+async def match(
+    request: Request, 
+    payload: MatchRequest, 
+    db: Session = Depends(get_db)
+):
     try:
         # 名前からタグIDを解決（単一/複数）
         if not payload.policy_tag:

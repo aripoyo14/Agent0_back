@@ -25,6 +25,9 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     await init_external_services()
+    # レート制限サービスの初期化を確認（この部分を修正）
+    from app.core.security.rate_limit.service import rate_limit_service
+    print(f" レート制限サービス状態: {rate_limit_service.config.enabled}")
 
 """ ----------
  ルーター登録

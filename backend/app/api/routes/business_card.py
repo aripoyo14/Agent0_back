@@ -3,6 +3,7 @@ import logging
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.business_card_service import business_card_service
+from app.core.security.rate_limit.decorators import rate_limit_file_upload
 
 # ログ設定
 logging.basicConfig(level=logging.DEBUG)
@@ -11,7 +12,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/business-cards", tags=["BusinessCards"])
 
 @router.post("/upload")
+@rate_limit_file_upload()
 async def upload_business_card(
+    request: Request,
     image: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):

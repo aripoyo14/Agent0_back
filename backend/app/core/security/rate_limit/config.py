@@ -29,9 +29,9 @@ class RateLimitConfig(BaseModel):
     comment_post_max_requests: int = Field(default=20, description="コメント投稿の最大試行回数")
     comment_post_window_seconds: int = Field(default=60, description="コメント投稿制限の時間枠（秒）")
     
-    # 読み取り系APIの制限（緩い）
-    read_api_max_requests: int = Field(default=100, description="読み取りAPIの最大試行回数")
-    read_api_window_seconds: int = Field(default=60, description="読み取りAPI制限の時間枠（秒）")
+    # 読み取り系APIの制限（本番用に変更）
+    read_api_max_requests: int = Field(default=20, description="読み取りAPIの最大試行回数")  # 2 → 20回
+    read_api_window_seconds: int = Field(default=300, description="読み取りAPI制限の時間枠（秒）")  # 120 → 300秒（5分）
     
     # グローバル制限
     global_ip_max_requests: int = Field(default=1000, description="IPアドレス別のグローバル最大リクエスト数")
@@ -60,7 +60,6 @@ class RateLimitConfig(BaseModel):
         case_sensitive = False
 
 # デフォルト設定インスタンス
-# デフォルト設定インスタンス
 default_config = RateLimitConfig(
     enabled=True,
     auth_login_max_requests=3,
@@ -71,8 +70,8 @@ default_config = RateLimitConfig(
     file_upload_window_seconds=60,
     comment_post_max_requests=20,
     comment_post_window_seconds=60,
-    read_api_max_requests=100,
-    read_api_window_seconds=60,
+    read_api_max_requests=20,  # 2 → 20回に変更
+    read_api_window_seconds=300,  # 120 → 300秒（5分）に変更
     global_ip_max_requests=1000,
     global_ip_window_seconds=3600,
     log_violations=True,
