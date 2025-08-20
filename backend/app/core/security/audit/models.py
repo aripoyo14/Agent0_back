@@ -5,7 +5,7 @@
 from datetime import datetime, timezone, timedelta
 from enum import Enum
 from sqlalchemy import Column, String, DateTime, Text, Boolean, JSON
-from app.db.database import Base 
+from app.db.base_class import Base 
 import uuid
 
 # 日本標準時（JST）のタイムゾーンを定義
@@ -55,6 +55,7 @@ class AuditEventType(str, Enum):
 class AuditLog(Base):
     """監査ログテーブル"""
     __tablename__ = "audit_logs"
+    __table_args__ = {'extend_existing': True}  # この行を追加
     
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     timestamp = Column(DateTime, default=datetime.now(JST), nullable=False)

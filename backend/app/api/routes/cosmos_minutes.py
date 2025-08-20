@@ -3,7 +3,7 @@
  - Azure Cosmos DBを使用した面談録（minutes）ベクトル化・検索
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional, Union
 from app.schemas.summary import SummaryRequest, SummaryResponse
@@ -11,11 +11,13 @@ from app.db.session import get_db
 from app.models.user import User
 from app.services.openai import generate_summary
 from app.services.cosmos_vector import cosmos_vector_service
+from app.core.security.rate_limit.decorators import rate_limit_read_api
 
 # FastAPIのルーターを初期化
 router = APIRouter(prefix="/cosmos-minutes", tags=["Cosmos Minutes"])
 
 @router.post("/minutes", summary="Vectorize Minutes", description="面談録（minutes）をベクトル化し、Cosmos DBに保存。関連度も更新")
+@rate_limit_read_api
 async def minutes(request: SummaryRequest, db: Session = Depends(get_db)):
     try:
         # 要約を生成（レスポンス表示用）。埋め込みはminutesを優先
@@ -63,7 +65,9 @@ async def minutes(request: SummaryRequest, db: Session = Depends(get_db)):
         )
 
 @router.get("/search", summary="Search Minutes", description="面談録（minutes）ベクトルの類似検索")
+@rate_limit_read_api
 async def search_minutes(
+    request: Request,
     query: str = Query(..., description="検索クエリ"),
     top_k: int = Query(5, description="返す結果の数"),
     expert_id: Optional[int] = Query(None, description="特定のエキスパートで絞り込み"),

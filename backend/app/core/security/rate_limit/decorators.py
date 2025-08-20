@@ -113,13 +113,48 @@ def rate_limit(
             
             # 元の関数を実行
             response = await func(*args, **kwargs)
+
+            # より詳細なデバッグ情報を追加
+            print(f"🔍 レスポンスオブジェクト詳細:")
+            print(f"   型: {type(response)}")
+            print(f"   属性: {dir(response)}")
+            print(f"   ヘッダー属性: {hasattr(response, 'headers')}")
+            print(f"   ボディ属性: {hasattr(response, 'body')}")
+            print(f"   ステータスコード属性: {hasattr(response, 'status_code')}")
             
-            # レスポンスにヘッダーを追加
-            if hasattr(response, 'headers'):
-                for key, value in headers.items():
-                    response.headers[key] = value
-            
-            return response
+            # レスポンスにヘッダーを追加（確実な方法）
+            try:
+                print(f"🔧 レスポンスヘッダー設定開始:")
+                print(f"   ヘッダー内容: {headers}")
+                
+                # 常に新しいレスポンスを作成してヘッダーを設定
+                if isinstance(response, dict):
+                    print(f"✅ 辞書レスポンス、JSONResponseで再作成")
+                    new_response = JSONResponse(
+                        status_code=200,
+                        content=response,
+                        headers=headers
+                    )
+                    print(f"   新しいレスポンス作成完了: {type(new_response)}")
+                    return new_response
+                elif hasattr(response, 'body') and hasattr(response, 'status_code'):
+                    print(f"✅ 既存レスポンス、JSONResponseで再作成")
+                    return JSONResponse(
+                        status_code=response.status_code,
+                        content=response.body,
+                        headers=headers
+                    )
+                else:
+                    print(f"⚠️  特殊なレスポンス、JSONResponseで再作成")
+                    return JSONResponse(
+                        status_code=200,
+                        content=response,
+                        headers=headers
+                    )
+            except Exception as e:
+                print(f"❌ レスポンスヘッダー設定エラー: {e}")
+                # エラーが発生した場合は元のレスポンスを返す
+                return response
         
         return wrapper
     return decorator
@@ -214,3 +249,14 @@ def rate_limit_read_api():
         rule_name="read_api",
         error_message=default_config.error_messages["read_api"]
     )
+
+# 修正版：デコレータを直接返す
+def rate_limit_read_api(func):
+    """読み取りAPI用のレート制限（1分間に100回まで）"""
+    return rate_limit(
+        max_requests=default_config.read_api_max_requests,
+        window_seconds=default_config.read_api_window_seconds,
+        request_type=RateLimitType.IP,
+        rule_name="read_api",
+        error_message=default_config.error_messages["read_api"]
+    )(func)

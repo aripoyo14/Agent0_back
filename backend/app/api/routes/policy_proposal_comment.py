@@ -4,7 +4,7 @@
  - コメント投稿（POST）を受け取り、バリデーション・DB登録処理を行う。
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from typing import Dict, List, Tuple, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, desc
@@ -33,6 +33,7 @@ from app.services.file_analyzer_full import extract_file_content_full, compare_a
 from app.db.session import SessionLocal
 from app.crud.policy_proposal.policy_proposal import list_attachments_by_policy_proposal_id
 from app.schemas.policy_proposal.policy_proposal import AttachmentOut
+from app.core.security.rate_limit.decorators import rate_limit_comment_post
 
 
 # FastAPIのルーターを初期化
@@ -53,7 +54,12 @@ def get_db():
 
 # 新規コメント投稿用のエンドポイント
 @router.post("/", response_model=PolicyProposalCommentResponse)
-def post_comment(comment_in: PolicyProposalCommentCreate, db: Session = Depends(get_db)):
+@rate_limit_comment_post()
+async def post_comment(
+    request: Request,
+    comment_in: PolicyProposalCommentCreate, 
+    db: Session = Depends(get_db)
+):
     """
     政策案に対するコメントを新規投稿する。
     
@@ -74,10 +80,14 @@ def post_comment(comment_in: PolicyProposalCommentCreate, db: Session = Depends(
       "comment_text": "コメント内容",
       "parent_comment_id": null
     }
-    ```
     """
-    comment = create_comment(db=db, comment_in=comment_in)
-    return comment
+    try:
+        comment = create_comment(db=db, comment_in=comment_in)
+        return comment
+    except Exception as e:
+        # エラーハンドリングを追加
+        logger.error(f"コメント作成エラー: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"コメントの作成に失敗しました: {str(e)}")
 
 # 単一コメント取得
 @router.get("/{comment_id}", response_model=PolicyProposalCommentResponse)
