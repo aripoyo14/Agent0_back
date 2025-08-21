@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.api.routes import user, auth, policy_proposal_comment, policy_proposal, cosmos_minutes, outreach, expert, search_network_map, meeting, network_routes, business_card
@@ -6,6 +6,9 @@ import app.models
 from app.core.startup import init_external_services
 from app.core.security.mfa import mfa_router
 from app.core.security.audit.router import router as audit_router
+from app.core.security.continuous_verification.service import ContinuousVerificationService
+from app.core.dependencies import get_db
+from typing import Optional
 
 app = FastAPI()
 
@@ -73,6 +76,35 @@ app.include_router(business_card.router, prefix="/api")
 
 # 監査ログAPI
 app.include_router(audit_router, prefix="/api")
+
+# 継続的検証ミドルウェアを追加
+@app.middleware("http")
+async def continuous_verification_middleware(request: Request, call_next):
+    # 継続的検証を実行
+    db = next(get_db())
+    try:
+        cv_service = ContinuousVerificationService(db)
+        
+        # セッションIDを取得（JWTから）
+        session_id = request.headers.get("x-session-id")
+        if session_id:
+            # 継続的検証を実行
+            access_allowed = await cv_service.monitor_session(
+                session_id=session_id,
+                request=request
+            )
+            
+            if not access_allowed:
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Access denied due to security risk"}
+                )
+        
+        response = await call_next(request)
+        return response
+        
+    finally:
+        db.close()
 
 
 @app.get("/")

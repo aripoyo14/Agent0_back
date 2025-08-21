@@ -45,24 +45,32 @@ class ContinuousVerificationService:
         """セッションの継続的監視"""
         
         if not self.config.ENABLED:
+            logger.info("継続的検証が無効化されています")
             return True
         
         try:
-            # 非同期で監視処理を実行（メイン処理をブロックしない）
-            if self.config.ASYNC_PROCESSING:
+            # 同期的な監視処理（制御機能を有効化）
+            if not self.config.MONITORING_ONLY:
+                logger.info(f"制御モードでセッション監視: session={session_id}")
+                return await self._synchronous_monitoring(session_id, request, user_id, user_type)
+            
+            # 非同期で監視処理を実行（監視のみモード）
+            else:
+                logger.info(f"監視モードでセッション監視: session={session_id}")
                 asyncio.create_task(
                     self._background_monitoring(session_id, request, user_id, user_type)
                 )
                 return True  # 即座にアクセス許可
-            
-            # 同期的な監視処理（設定で選択可能）
-            else:
-                return await self._synchronous_monitoring(session_id, request, user_id, user_type)
                 
         except Exception as e:
             logger.error(f"セッション監視でエラー: {e}")
-            # フェイルセーフ：エラー時はアクセス許可
-            return True
+            # エラー時は設定に応じて制御
+            if self.config.FAILSAFE_MODE:
+                logger.warning("フェイルセーフモード：エラー時はアクセス許可")
+                return True  # フェイルセーフ時はアクセス許可
+            else:
+                logger.error("本番モード：エラー時はアクセス拒否")
+                return False  # 本番環境ではアクセス拒否
     
     async def _background_monitoring(
         self, 
@@ -104,8 +112,10 @@ class ContinuousVerificationService:
         user_id: Optional[str] = None,
         user_type: Optional[str] = None
     ) -> bool:
-        """同期的な監視処理"""
+        """同期的な監視処理（制御機能付き）"""
         try:
+            logger.info(f"セッション監視開始: session={session_id}, user={user_id}")
+            
             # リスクスコアの計算
             risk_score, risk_factors = await self.risk_engine.calculate_risk(
                 session_id, request, user_id, user_type
@@ -114,17 +124,35 @@ class ContinuousVerificationService:
             # リスクスコアの記録
             await self._record_risk_score(session_id, risk_score, risk_factors, request)
             
-            # 極めて高いリスクの場合のみアクセス拒否
+            # 段階的な制御を実装
             if risk_score > self.config.EXTREME_RISK_THRESHOLD:
+                logger.warning(f"極高リスク検出: session={session_id}, score={risk_score}")
                 await self._handle_extreme_risk(session_id, risk_score, request)
-                return False
+                return False  # アクセス拒否
             
+            elif risk_score > self.config.HIGH_RISK_THRESHOLD:
+                logger.warning(f"高リスク検出: session={session_id}, score={risk_score}")
+                await self._handle_high_risk(session_id, risk_score, request)
+                # 追加認証を要求
+                return await self._require_additional_verification(session_id, request)
+            
+            elif risk_score > self.config.MEDIUM_RISK_THRESHOLD:
+                logger.info(f"中リスク検出: session={session_id}, score={risk_score}")
+                # 監視強化
+                await self._enhance_monitoring(session_id, risk_score, request)
+            
+            logger.info(f"セッション監視完了: session={session_id}, score={risk_score}, access=ALLOWED")
             return True
             
         except Exception as e:
             logger.error(f"同期的監視でエラー: {e}")
-            # フェイルセーフ：エラー時はアクセス許可
-            return True
+            # エラー時は設定に応じて制御
+            if self.config.FAILSAFE_MODE:
+                logger.warning("フェイルセーフモード：エラー時はアクセス許可")
+                return True  # フェイルセーフ時はアクセス許可
+            else:
+                logger.error("本番モード：エラー時はアクセス拒否")
+                return False  # 本番環境ではアクセス拒否
     
     async def _record_risk_score(
         self, 
@@ -375,3 +403,61 @@ class ContinuousVerificationService:
         except Exception as e:
             logger.error(f"セッションデータクリーンアップでエラー: {e}")
             self.db.rollback()
+
+    async def _handle_high_risk(
+        self, 
+        session_id: str, 
+        risk_score: int, 
+        request: Request
+    ):
+        """高リスク時の対応"""
+        try:
+            # 脅威検出レコードを作成
+            threat_record = ThreatDetection(
+                session_id=session_id,
+                threat_type=ThreatType.SUSPICIOUS_ACTIVITY.value,
+                threat_level=RiskLevel.HIGH.value,
+                details={
+                    "risk_score": risk_score,
+                    "action": "additional_verification_required",
+                    "endpoint": str(request.url.path),
+                    "http_method": request.method,
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                },
+                risk_score_at_detection=risk_score,
+                mitigated=False,
+                mitigation_action="additional_verification_required"
+            )
+            
+            self.db.add(threat_record)
+            self.db.commit()
+            
+            logger.warning(f"高リスク対応完了: session={session_id}, action=additional_verification_required")
+            
+        except Exception as e:
+            logger.error(f"高リスク対応でエラー: {e}")
+            self.db.rollback()
+    
+    async def _require_additional_verification(self, session_id: str, request: Request) -> bool:
+        """追加認証の要求"""
+        try:
+            logger.info(f"追加認証要求: session={session_id}")
+            
+            # 現在は簡易実装：追加認証が必要なためアクセス拒否
+            # 実際の実装では、追加の認証フローを実装
+            return False
+            
+        except Exception as e:
+            logger.error(f"追加認証要求でエラー: {e}")
+            return False
+    
+    async def _enhance_monitoring(self, session_id: str, risk_score: int, request: Request):
+        """監視強化"""
+        try:
+            logger.info(f"監視強化: session={session_id}, score={risk_score}")
+            
+            # 監視レベルを上げる（ログの詳細化、頻度の向上など）
+            # 現在はログ出力のみ
+            
+        except Exception as e:
+            logger.error(f"監視強化でエラー: {e}")

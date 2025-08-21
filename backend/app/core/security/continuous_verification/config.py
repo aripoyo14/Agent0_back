@@ -6,19 +6,20 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
 import os
+from pydantic import Field
 
 class ContinuousVerificationConfig(BaseSettings):
     """継続的検証の設定クラス"""
     
     # 基本設定
-    ENABLED: bool = True
-    MONITORING_ONLY: bool = True  # 開発中は監視のみ
+    ENABLED: bool = Field(default=True, description="継続的検証を有効にするか")
+    MONITORING_ONLY: bool = Field(default=False, description="監視のみモード")
     
-    # リスク閾値（段階的な制御）
-    LOW_RISK_THRESHOLD: int = 30
-    MEDIUM_RISK_THRESHOLD: int = 60
-    HIGH_RISK_THRESHOLD: int = 80
-    EXTREME_RISK_THRESHOLD: int = 95
+    # リスク閾値
+    LOW_RISK_THRESHOLD: int = Field(default=30, description="低リスク閾値")
+    MEDIUM_RISK_THRESHOLD: int = Field(default=60, description="中リスク閾値")
+    HIGH_RISK_THRESHOLD: int = Field(default=80, description="高リスク閾値")
+    EXTREME_RISK_THRESHOLD: int = Field(default=95, description="極高リスク閾値")
     
     # パフォーマンス設定
     ASYNC_PROCESSING: bool = True
@@ -27,8 +28,8 @@ class ContinuousVerificationConfig(BaseSettings):
     CLEANUP_INTERVAL_HOURS: int = 24
     
     # セキュリティ設定
-    FAILSAFE_MODE: bool = True
-    DEFAULT_ACTION: str = "ALLOW"
+    FAILSAFE_MODE: bool = Field(default=False, description="フェイルセーフモード")
+    DEFAULT_ACTION: str = Field(default="DENY", description="デフォルトアクション")
     MAX_SESSION_AGE_HOURS: int = 24
     
     # 監視設定
@@ -42,6 +43,7 @@ class ContinuousVerificationConfig(BaseSettings):
     
     class Config:
         env_prefix = "CONTINUOUS_VERIFICATION_"
+        env_file = ".env"
         extra = "ignore"
         case_sensitive = False
 
