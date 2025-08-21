@@ -104,16 +104,40 @@ class RiskEngine:
     async def _calculate_location_risk(self, session_id: str, request: Request) -> RiskFactor:
         """地理的位置のリスクを計算"""
         try:
-            # 実装例（実際のIP地理情報サービスと連携）
             current_ip = self._get_client_ip(request)
             previous_ip = await self._get_previous_ip(session_id)
             
             if not previous_ip or current_ip == previous_ip:
                 score = 0
             else:
-                # 地理的距離に基づくリスク計算
-                distance = await self._calculate_geographic_distance(previous_ip, current_ip)
-                score = min(distance * 2, 100)  # 距離に応じたスコア
+                # 実際の地理情報サービスと連携
+                try:
+                    from app.services.geo_location import GeoLocationService
+                    geo_service = GeoLocationService()
+                    
+                    current_location = await geo_service.get_location(current_ip)
+                    previous_location = await geo_service.get_location(previous_ip)
+                    
+                    if current_location and previous_location:
+                        distance = geo_service.calculate_distance(
+                            current_location, previous_location
+                        )
+                        
+                        # 距離に基づくリスク計算
+                        if distance < 10:  # 10km以内
+                            score = 10
+                        elif distance < 100:  # 100km以内
+                            score = 30
+                        elif distance < 1000:  # 1000km以内
+                            score = 60
+                        else:  # 1000km以上
+                            score = 90
+                    else:
+                        score = 50  # 地理情報取得失敗
+                        
+                except ImportError:
+                    # 地理情報サービスが利用できない場合
+                    score = 25  # 中程度のリスク
             
             return RiskFactor(
                 name=RiskFactorType.LOCATION_CHANGE,
@@ -122,14 +146,16 @@ class RiskEngine:
                 details={
                     "current_ip": current_ip,
                     "previous_ip": previous_ip,
-                    "distance_km": distance if 'distance' in locals() else None
+                    "distance_km": distance if 'distance' in locals() else None,
+                    "current_location": current_location if 'current_location' in locals() else None
                 }
             )
         except Exception as e:
+            logger.error(f"地理的位置リスク計算でエラー: {e}")
             return RiskFactor(
                 name=RiskFactorType.LOCATION_CHANGE,
                 weight=self.risk_factors[RiskFactorType.LOCATION_CHANGE],
-                score=0,
+                score=50,  # エラー時は中程度のリスク
                 details={"error": str(e)}
             )
     
@@ -236,3 +262,63 @@ class RiskEngine:
             return "Asia/Tokyo"  # デフォルト
         except Exception:
             return None
+
+    def _calculate_behavior_risk(self, session_id: str, request: Request, user_id: Optional[str] = None) -> RiskFactor:
+        """行動パターンのリスクを計算"""
+        try:
+            if not user_id:
+                return RiskFactor(
+                    name=RiskFactorType.BEHAVIOR_CHANGE,
+                    weight=self.risk_factors[RiskFactorType.BEHAVIOR_CHANGE],
+                    score=0,
+                    details={"reason": "user_id_not_provided"}
+                )
+            
+            # ユーザーの過去の行動パターンを取得
+            behavior_pattern = self._get_user_behavior_pattern(user_id)
+            if not behavior_pattern:
+                return RiskFactor(
+                    name=RiskFactorType.BEHAVIOR_CHANGE,
+                    weight=self.risk_factors[RiskFactorType.BEHAVIOR_CHANGE],
+                    score=20,  # 初回アクセス
+                    details={"reason": "first_access"}
+                )
+            
+            # 現在のリクエストパターンを分析
+            current_pattern = self._analyze_current_request(request)
+            
+            # パターンの類似度を計算
+            similarity_score = self._calculate_pattern_similarity(
+                behavior_pattern.pattern_data, 
+                current_pattern
+            )
+            
+            # 類似度に基づくリスクスコア
+            if similarity_score > 0.8:
+                score = 0  # 正常な行動
+            elif similarity_score > 0.6:
+                score = 20  # 軽微な変化
+            elif similarity_score > 0.4:
+                score = 50  # 中程度の変化
+            else:
+                score = 80  # 大きな変化
+            
+            return RiskFactor(
+                name=RiskFactorType.BEHAVIOR_CHANGE,
+                weight=self.risk_factors[RiskFactorType.BEHAVIOR_CHANGE],
+                score=score,
+                details={
+                    "similarity_score": similarity_score,
+                    "pattern_change": 1 - similarity_score,
+                    "current_pattern": current_pattern
+                }
+            )
+            
+        except Exception as e:
+            logger.error(f"行動パターンリスク計算でエラー: {e}")
+            return RiskFactor(
+                name=RiskFactorType.BEHAVIOR_CHANGE,
+                weight=self.risk_factors[RiskFactorType.BEHAVIOR_CHANGE],
+                score=30,  # エラー時は軽微なリスク
+                details={"error": str(e)}
+            )
