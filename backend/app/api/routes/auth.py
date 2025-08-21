@@ -32,7 +32,8 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
     event_type=AuditEventType.AUTH_LOGIN_SUCCESS,
     resource="auth",
     action="login",
-    user_type="user"  # 動的に判定される
+    user_type="user",
+    session_id_key="session_id"  # 明示的に指定
 )
 def login_user(
     http_request: Request, 
@@ -68,7 +69,14 @@ def login_user(
                     user_agent=http_request.headers.get("user-agent")
                 )
                 
+                # セッション作成後、kwargsにsession_idを追加
                 session_response = session_manager.create_session(session_create)
+                
+                # kwargsにsession_idを追加（継続監視用）
+                import inspect
+                frame = inspect.currentframe()
+                if frame and frame.f_back:
+                    frame.f_back.f_locals['kwargs']['session_id'] = session_response.session_id
                 
                 # 成功時の監査ログ
                 try:
@@ -139,7 +147,13 @@ def login_user(
                     user_agent=http_request.headers.get("user-agent")
                 )
                 
+                # セッション作成後、kwargsにsession_idを追加
                 session_response = session_manager.create_session(session_create)
+                
+                # kwargsにsession_idを追加（継続監視用）
+                frame = inspect.currentframe()
+                if frame and frame.f_back:
+                    frame.f_back.f_locals['kwargs']['session_id'] = session_response.session_id
                 
                 # 成功時の監査ログ
                 try:
