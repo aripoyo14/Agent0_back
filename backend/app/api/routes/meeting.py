@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import httpx
 import re
 
 from app.core.dependencies import get_current_user
+from app.core.security.audit import AuditService, AuditEventType
+from app.core.security.audit.decorators import audit_log
 from app.crud.meeting import meeting_crud, meeting_evaluation_crud
 from app.db.session import get_db
 from app.models.user import User
@@ -36,8 +38,14 @@ def clean_text_for_api(text: str) -> str:
 router = APIRouter(prefix="/meetings", tags=["Meetings"])
 
 @router.post("/", response_model=MeetingResponse, summary="Create Meeting")
+@audit_log(
+    event_type=AuditEventType.DATA_CREATE,
+    resource="meeting",
+    action="create"
+)
 async def create_meeting(
     meeting_data: MeetingCreate,
+    http_request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -52,8 +60,14 @@ async def create_meeting(
         )
 
 @router.get("/{meeting_id}", response_model=MeetingResponse, summary="Get Meeting")
+@audit_log(
+    event_type=AuditEventType.DATA_READ,
+    resource="meeting",
+    action="read"
+)
 async def get_meeting(
     meeting_id: str,
+    http_request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -67,7 +81,13 @@ async def get_meeting(
     return meeting
 
 @router.get("/", response_model=List[MeetingResponse], summary="Get All Meetings")
+@audit_log(
+    event_type=AuditEventType.DATA_READ,
+    resource="meeting",
+    action="list"
+)
 async def get_all_meetings(
+    http_request: Request,  # 最初に配置
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
@@ -78,9 +98,15 @@ async def get_all_meetings(
     return meetings
 
 @router.put("/{meeting_id}", response_model=MeetingResponse, summary="Update Meeting")
+@audit_log(
+    event_type=AuditEventType.DATA_UPDATE,
+    resource="meeting",
+    action="update"
+)
 async def update_meeting(
     meeting_id: str,
     meeting_data: MeetingUpdate,
+    http_request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -94,8 +120,14 @@ async def update_meeting(
     return meeting
 
 @router.delete("/{meeting_id}", summary="Delete Meeting")
+@audit_log(
+    event_type=AuditEventType.DATA_DELETE,
+    resource="meeting",
+    action="delete"
+)
 async def delete_meeting(
     meeting_id: str,
+    http_request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -109,7 +141,13 @@ async def delete_meeting(
     return {"message": "面談を削除しました"}
 
 @router.post("/{meeting_id}/upload-minutes", response_model=MinutesUploadResponse, summary="Upload Minutes")
+@audit_log(
+    event_type=AuditEventType.FILE_UPLOAD,
+    resource="meeting_minutes",
+    action="upload"
+)
 async def upload_minutes(
+    http_request: Request,  # 最初に配置
     meeting_id: str,
     file: UploadFile = File(...),
     expert_id: Optional[str] = Form(None),
@@ -216,7 +254,13 @@ async def upload_minutes(
 
 # 評価関連エンドポイント
 @router.put("/{meeting_id}/evaluate", response_model=MeetingEvaluationResponse, summary="Update Meeting Evaluation")
+@audit_log(
+    event_type=AuditEventType.DATA_UPDATE,
+    resource="meeting_evaluation",
+    action="update"
+)
 async def evaluate_meeting(
+    http_request: Request,  # 最初に配置
     meeting_id: str,
     evaluation_data: MeetingEvaluationCreate,
     db: Session = Depends(get_db),
@@ -251,8 +295,14 @@ async def evaluate_meeting(
         )
 
 @router.get("/{meeting_id}/evaluation", response_model=MeetingEvaluationResponse, summary="Get Meeting Evaluation")
+@audit_log(
+    event_type=AuditEventType.DATA_READ,
+    resource="meeting_evaluation",
+    action="read"
+)
 async def get_meeting_evaluation(
     meeting_id: str,
+    http_request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):

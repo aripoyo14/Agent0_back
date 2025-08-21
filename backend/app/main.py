@@ -5,6 +5,7 @@ from app.api.routes import user, auth, policy_proposal_comment, policy_proposal,
 import app.models
 from app.core.startup import init_external_services
 from app.core.security.mfa import mfa_router
+from app.core.security.audit.router import router as audit_router
 
 app = FastAPI()
 
@@ -69,6 +70,9 @@ app.include_router(network_routes.router, prefix="/api")
 
 # 名刺画像アップロードAPI
 app.include_router(business_card.router, prefix="/api")
+
+# 監査ログAPI
+app.include_router(audit_router, prefix="/api")
 
 
 @app.get("/")
