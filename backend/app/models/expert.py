@@ -1,6 +1,6 @@
 from __future__ import annotations
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import Column, String, Boolean, DateTime, Date, Enum, JSON
+from sqlalchemy import Column, String, Boolean, DateTime, Date, Enum, JSON, ForeignKey
 from typing import Optional, List
 from sqlalchemy.dialects.mysql import CHAR, DECIMAL
 from sqlalchemy.sql import func
@@ -38,8 +38,11 @@ class Expert(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(JST), onupdate=lambda: datetime.now(JST))
     role = Column(Enum('contributor', 'viewer', name='expert_role'), default='viewer')
 
-    # リレーション
-    meeting_participations = relationship("MeetingExpert", back_populates="expert")
+    # 招待関連フィールド（新規追加）
+    invited_by_user_id = Column(CHAR(36), ForeignKey("users.id"), nullable=True)
+    invited_by_expert_id = Column(CHAR(36), ForeignKey("experts.id"), nullable=True)
+    invitation_code = Column(String(100), nullable=True)
+    invited_at = Column(DateTime, nullable=True)
 
     # MFA関連フィールド（新規追加）
     mfa_enabled: bool = Column(Boolean, default=False, nullable=False)
@@ -59,6 +62,11 @@ class Expert(Base):
 
     # 名刺画像関連のカラムを追加
     business_card_image_url = Column(String(500), nullable=True, comment="名刺画像のURL")
+
+    # リレーション
+    meeting_participations = relationship("MeetingExpert", back_populates="expert")
+    invited_by_user = relationship("User", foreign_keys=[invited_by_user_id])
+    invited_by_expert = relationship("Expert", foreign_keys=[invited_by_expert_id], remote_side=[id])
 
     def _get_encryption_service(self):
         """暗号化サービスを遅延インポートで取得"""

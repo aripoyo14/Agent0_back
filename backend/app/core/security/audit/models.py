@@ -7,6 +7,9 @@ from enum import Enum
 from sqlalchemy import Column, String, DateTime, Text, Boolean, JSON
 from app.db.base_class import Base 
 import uuid
+from app.services.invitation_code import InvitationCodeService
+from datetime import datetime, timezone, timedelta
+from typing import Optional
 
 # 日本標準時（JST）のタイムゾーンを定義
 JST = timezone(timedelta(hours=9))
@@ -50,6 +53,10 @@ class AuditEventType(str, Enum):
     
     # MFA設定完了
     MFA_SETUP_COMPLETE = "mfa:setup:complete"
+
+    INVITATION_CODE_GENERATED = "invitation_code_generated"
+    INVITATION_CODE_USED = "invitation_code_used"
+    INVITATION_CODE_DEACTIVATED = "invitation_code_deactivated"
 
 
 class AuditLog(Base):
