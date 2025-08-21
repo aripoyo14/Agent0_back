@@ -1,11 +1,12 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from app.api.routes import user, auth, policy_proposal_comment, policy_proposal, cosmos_minutes, outreach, expert, search_network_map, meeting, network_routes, business_card
+from app.api.routes import user, auth, policy_proposal_comment, policy_proposal, cosmos_minutes, outreach, expert, search_network_map, meeting, network_routes, business_card, invitation_code
 import app.models
 from app.core.startup import init_external_services
 from app.core.security.mfa import mfa_router
 from app.core.security.audit.router import router as audit_router
+
 
 app = FastAPI()
 
@@ -70,6 +71,9 @@ app.include_router(network_routes.router, prefix="/api")
 
 # 名刺画像アップロードAPI
 app.include_router(business_card.router, prefix="/api")
+
+# 招待コードルートを追加
+app.include_router(invitation_code.router, prefix="/api")
 
 # 監査ログAPI
 app.include_router(audit_router, prefix="/api")
