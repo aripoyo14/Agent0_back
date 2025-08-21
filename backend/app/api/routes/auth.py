@@ -12,6 +12,7 @@ from app.schemas.auth import LoginRequest, TokenResponse
 from app.core.security import verify_password
 from app.core.security.jwt import create_access_token
 from app.core.security.audit import AuditService, AuditEventType
+from app.core.security.audit.decorators import continuous_verification_audit
 from app.core.security.session import session_manager, SessionCreate
 from app.db.session import get_db
 from app.models.user import User
@@ -27,6 +28,12 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 
 # User/ExpertログインAPI (ユーザー認証を行い、アクセストークン（JWT）を発行して返す)
 @router.post("/login")
+@continuous_verification_audit(
+    event_type=AuditEventType.AUTH_LOGIN_SUCCESS,
+    resource="auth",
+    action="login",
+    user_type="user"  # 動的に判定される
+)
 def login_user(
     http_request: Request, 
     request: LoginRequest, 
@@ -238,6 +245,11 @@ class RefreshTokenRequest(BaseModel):
 
 # リフレッシュトークンを使用してアクセストークンを更新
 @router.post("/refresh")
+@continuous_verification_audit(
+    event_type=AuditEventType.AUTH_LOGIN_SUCCESS,
+    resource="auth",
+    action="refresh"
+)
 async def refresh_token(request: RefreshTokenRequest):
     """リフレッシュトークンを使用してアクセストークンを更新"""
 
@@ -275,6 +287,11 @@ async def refresh_token(request: RefreshTokenRequest):
 
 # ログアウト（セッション無効化）
 @router.post("/logout")
+@continuous_verification_audit(
+    event_type=AuditEventType.AUTH_LOGOUT,
+    resource="auth",
+    action="logout"
+)
 def logout(
     session_id: str,
     http_request: Request = None
