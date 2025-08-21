@@ -21,10 +21,9 @@ def audit_log(
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            print(f"🔍 監査ログデコレーター開始: {event_type} - {resource} - {action}")
-            print(f"🔍 関数名: {func.__name__}")
-            print(f"🔍 引数の数: {len(args)}")
-            print(f"🔍 キーワード引数: {list(kwargs.keys())}")
+            # デバッグ出力を削除し、適切なログに変更
+            import logging
+            logger = logging.getLogger(__name__)
             
             # リクエストオブジェクトを取得（複数の方法を試行）
             request = None
@@ -32,36 +31,24 @@ def audit_log(
             # 1. kwargsからhttp_requestを取得（面談APIで使用されている名前）
             if 'http_request' in kwargs:
                 request = kwargs['http_request']
-                print(f"🔍 kwargsからhttp_requestを取得: {type(request)}")
+                # print(f"🔍 kwargsからhttp_requestを取得: {type(request)}")
             
             # 2. argsからRequest型のオブジェクトを取得
             if not request:
-                for i, arg in enumerate(args):
-                    print(f"🔍 arg[{i}]: {type(arg).__name__} = {arg}")
+                for arg in args: 
                     if isinstance(arg, Request):
                         request = arg
-                        print(f"🔍 args[{i}]からRequest型を取得: {type(request)}")
                         break
             
             # 3. kwargsからRequest型のオブジェクトを取得
             if not request:
                 for key, value in kwargs.items():
-                    print(f"🔍 kwargs[{key}]: {type(value).__name__} = {value}")
+                    # print(f"🔍 kwargs[{key}]: {type(value).__name__} = {value}")
                     if isinstance(value, Request):
                         request = value
-                        print(f"🔍 kwargsからRequest型を取得: {key} -> {type(value)}")
+                        # print(f"🔍 kwargsからRequest型を取得: {key} -> {type(value)}")
                         break
-            
-            # リクエストオブジェクトが見つからない場合のデバッグ
-            if not request:
-                print(f"⚠️  リクエストオブジェクトが見つかりません")
-                print(f"   args: {[type(arg).__name__ for arg in args]}")
-                print(f"   kwargs: {list(kwargs.keys())}")
-                print(f"   kwargsの値の型: {[(k, type(v).__name__) for k, v in kwargs.items()]}")
-            else:
-                print(f"✅ リクエストオブジェクトを取得: {type(request)}")
-                print(f"   リクエストヘッダー: {dict(request.headers)}")
-            
+                        
             # データベースセッションを取得（より確実な方法）
             db = None
             # 1. kwargsから取得を試行
@@ -107,29 +94,20 @@ def audit_log(
                     extracted_user_type = current_user['user_type']
                 
                 # デバッグ用のログを追加
-                print(f"🔍 ユーザー情報抽出: ID={extracted_user_id}, Type={extracted_user_type}")
+                # print(f"🔍 ユーザー情報抽出: ID={extracted_user_id}, Type={extracted_user_type}")
             
             try:
                 # 関数を実行
-                print(f"🔍 関数実行開始: {func.__name__}")
+                # print(f"🔍 関数実行開始: {func.__name__}")
                 result = await func(*args, **kwargs)
-                print(f"🔍 関数実行完了: {func.__name__}")
+                # print(f"🔍 関数実行完了: {func.__name__}")
                 
                 # 成功時の監査ログ（dbが利用可能な場合のみ）
                 if db:
                     try:
-                        print(f"🔍 監査ログ記録開始")
+                        # print(f"🔍 監査ログ記録開始")
                         audit_service = AuditService(db)
-                        
-                        # リクエスト情報のデバッグ
-                        if request:
-                            print(f"🔍 監査ログ記録時のリクエスト情報:")
-                            print(f"   リクエストタイプ: {type(request)}")
-                            print(f"   ヘッダー: {dict(request.headers)}")
-                            print(f"   クライアント: {request.client}")
-                        else:
-                            print(f"⚠️  リクエストオブジェクトがNoneです")
-                        
+                                                
                         await audit_service.log_event(
                             event_type=event_type,
                             resource=resource,
@@ -140,18 +118,18 @@ def audit_log(
                             request=request,
                             details={"result": "success"}
                         )
-                        print(f"✅ 監査ログ記録完了: {event_type} - {resource} - {action}")
+                        logger.debug(f"✅ 監査ログ記録完了: {event_type} - {resource} - {action}")
                     except Exception as audit_error:
-                        print(f"⚠️ 監査ログ記録でエラー: {audit_error}")
+                        logger.debug(f"⚠️ 監査ログ記録でエラー: {audit_error}")
                         import traceback
                         traceback.print_exc()
                         # 監査ログのエラーは本処理を妨げない
                 else:
-                    print(f"⚠️ データベースセッションが見つかりません: {event_type}")
+                    logger.debug(f"⚠️ データベースセッションが見つかりません: {event_type}")
                 
                 return result
             except Exception as e:
-                print(f"❌ 関数実行でエラー: {e}")
+                logger.debug(f"❌ 関数実行でエラー: {e}")
                 # エラー時の監査ログ
                 if db:
                     try:
@@ -166,11 +144,9 @@ def audit_log(
                             request=request,
                             details={"error": str(e)}
                         )
-                        print(f"✅ エラー時の監査ログ記録完了: {event_type}")
+                        # print(f"✅ エラー時の監査ログ記録完了: {event_type}")
                     except Exception as audit_error:
-                        print(f"⚠️ エラー時の監査ログ記録でエラー: {audit_error}")
-                else:
-                    print(f"⚠️ エラー時の監査ログ記録でDBセッションが見つかりません")
+                        logger.debug(f"⚠️ エラー時の監査ログ記録でエラー: {audit_error}")
                 
                 raise e
         return wrapper
@@ -243,25 +219,64 @@ def audit_log_sync(
     return decorator
 
 
-def simple_audit_log(
+# 継続的検証付き監査ログデコレーター
+def continuous_verification_audit(
     event_type: AuditEventType,
     resource: Optional[str] = None,
-    action: Optional[str] = None
+    action: Optional[str] = None,
+    user_id: Optional[str] = None,
+    user_type: Optional[str] = None
 ):
-    """シンプルな監査ログデコレーター（テスト用）"""
+    """継続的検証付き監査ログデコレーター"""
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            print(f"🔍 シンプル監査ログデコレーター開始: {event_type}")
-            print(f"🔍 関数名: {func.__name__}")
-            print(f"🔍 引数: {args}")
-            print(f"🔍 キーワード引数: {kwargs}")
+            # 既存の監査ログ処理
+            result = await audit_log(
+                event_type, resource, action, user_id, user_type
+            )(func)(*args, **kwargs)
             
-            # 関数を実行
-            result = await func(*args, **kwargs)
-            
-            # 簡単なログ出力
-            print(f"✅ シンプル監査ログ完了: {event_type}")
+            # 継続的検証の追加
+            try:
+                from app.core.security.continuous_verification.service import ContinuousVerificationService
+                from app.core.dependencies import get_db
+                import logging
+                
+                logger = logging.getLogger(__name__)
+                
+                # データベースセッションを取得
+                db = None
+                for arg in args:
+                    if hasattr(arg, 'execute') and hasattr(arg, 'commit'):
+                        db = arg
+                        break
+                
+                if db:
+                    # 継続的検証サービスを初期化
+                    cv_service = ContinuousVerificationService(db)
+                    
+                    # リクエストオブジェクトを取得
+                    request = None
+                    for arg in args:
+                        if isinstance(arg, Request):
+                            request = arg
+                            break
+                    
+                    if request:
+                        # セッションIDを取得
+                        session_id = kwargs.get('session_id') or 'unknown'
+                        
+                        # 継続的検証を実行
+                        await cv_service.monitor_session(
+                            session_id=session_id,
+                            request=request,
+                            user_id=user_id,
+                            user_type=user_type
+                        )
+                
+            except Exception as e:
+                # 継続的検証のエラーは本処理を妨げない
+                logger.error(f"継続的検証でエラー: {e}")
             
             return result
         return wrapper
