@@ -17,7 +17,7 @@ class AuditService:
         self.db = db
         self.config = AuditConfig()
     
-    def log_event(
+    async def log_event(
         self,
         event_type: AuditEventType,
         user_id: Optional[str] = None,
@@ -29,7 +29,7 @@ class AuditService:
         details: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None
     ) -> AuditLog:
-        """監査イベントを記録"""
+        """監査イベントを記録（非同期版）"""
         
         if not self.config.AUDIT_ENABLED:
             return None
@@ -47,10 +47,6 @@ class AuditService:
             if details and self.config.AUDIT_MASK_SENSITIVE:
                 details = self._mask_sensitive_data(details)
             
-            print(f"🔍 監査ログを作成中: {event_type}")
-            print(f"🔍 ユーザーID: {user_id}")
-            print(f"🔍 詳細: {details}")
-            
             # 監査ログの作成
             audit_log = AuditLog(
                 user_id=user_id,
@@ -65,31 +61,19 @@ class AuditService:
                 session_id=session_id
             )
             
-            print(f"🔍 監査ログオブジェクト作成完了: {audit_log.id}")
-            
             # データベースに保存
             self.db.add(audit_log)
-            print("🔍 データベースに追加完了")
-            
             self.db.commit()
-            print("✅ コミット完了")
-            
             self.db.refresh(audit_log)
-            print("🔍 リフレッシュ完了")
             
             return audit_log
             
         except Exception as e:
-            print(f"❌ 監査ログの保存でエラー: {e}")
-            print(f"❌ エラーの型: {type(e)}")
-            print(f"❌ エラーの詳細: {str(e)}")
-            
             # データベースの状態を確認
             try:
                 self.db.rollback()
-                print("✅ ロールバック完了")
             except Exception as rollback_error:
-                print(f"❌ ロールバックでもエラー: {rollback_error}")
+                pass
             
             # エラーを再発生させる
             raise e
@@ -97,17 +81,38 @@ class AuditService:
     def _get_client_ip(self, request: Request) -> str:
         """クライアントのIPアドレスを取得"""
         try:
+            print(f"🔍 IPアドレス取得処理開始")
+            print(f"   リクエストヘッダー: {dict(request.headers)}")
+            
+            # カスタムヘッダーから取得（テスト用）
+            custom_ip = request.headers.get("x-client-ip")
+            if custom_ip:
+                print(f"   X-Client-IPから取得: {custom_ip}")
+                return custom_ip
+            
             # プロキシ経由の場合の対応
             forwarded_for = request.headers.get("x-forwarded-for")
             if forwarded_for:
-                return forwarded_for.split(",")[0].strip()
+                ip = forwarded_for.split(",")[0].strip()
+                print(f"   X-Forwarded-Forから取得: {ip}")
+                return ip
             
             real_ip = request.headers.get("x-real-ip")
             if real_ip:
+                print(f"   X-Real-IPから取得: {real_ip}")
                 return real_ip
             
-            return request.client.host if request.client else "unknown"
-        except Exception:
+            # クライアントの直接IP
+            if request.client and request.client.host:
+                ip = request.client.host
+                print(f"   クライアントホストから取得: {ip}")
+                return ip
+            
+            print(f"   IPアドレスが取得できませんでした")
+            return "unknown"
+            
+        except Exception as e:
+            print(f"❌ IPアドレス取得エラー: {e}")
             return "unknown"
     
     def _mask_sensitive_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -155,3 +160,21 @@ class AuditService:
             )\
             .order_by(AuditLog.timestamp.desc())\
             .all()
+    
+    def get_logs(
+        self,
+        limit: int = 100,
+        offset: int = 0
+    ) -> list[AuditLog]:
+        """全ての監査ログを取得"""
+        return self.db.query(AuditLog)\
+            .order_by(AuditLog.timestamp.desc())\
+            .offset(offset)\
+            .limit(limit)\
+            .all()
+    
+    def get_log_by_id(self, log_id: str) -> AuditLog:
+        """特定の監査ログをIDで取得"""
+        return self.db.query(AuditLog)\
+            .filter(AuditLog.id == log_id)\
+            .first()

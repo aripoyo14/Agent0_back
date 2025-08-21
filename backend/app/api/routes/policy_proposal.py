@@ -15,6 +15,9 @@ from app.core.blob import upload_binary_to_blob
 from app.core.dependencies import get_current_user
 from uuid import UUID, uuid4
 import os
+from app.core.security.audit import AuditService, AuditEventType
+from app.core.security.audit.decorators import audit_log, audit_log_sync
+from app.models.user import User
 
 # FastAPIのルーターを初期化
 router = APIRouter(prefix="/policy-proposals", tags=["PolicyProposals"])
@@ -34,13 +37,20 @@ def get_db():
 
 # 新規政策案の登録用エンドポイント
 @router.post("/", response_model=ProposalOut)
-def post_policy_proposal_with_attachments(
+@audit_log(  
+    event_type=AuditEventType.DATA_CREATE,
+    resource="policy_proposal",
+    action="create"
+)
+async def post_policy_proposal_with_attachments(
+    http_request: Request,
     title: str = Form(...),
     body: str = Form(...),
     published_by_user_id: str = Form(...),
     status: str = Form("draft"),
     files: list[UploadFile] | None = File(None),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
 
     """
@@ -124,11 +134,18 @@ def post_policy_proposal_with_attachments(
 
 # 政策案の一覧取得（簡易検索・ページング付き）
 @router.get("/", response_model=list[ProposalOut])
-def get_policy_proposals(
+@audit_log(
+    event_type=AuditEventType.DATA_READ,
+    resource="policy_proposal",
+    action="list"
+)
+async def get_policy_proposals(
+    http_request: Request,
     status: str | None = Query(None, description="draft / published / archived のいずれか"),
     q: str | None = Query(None, description="タイトル・本文の部分一致"),
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
+    current_user: dict = Depends(get_current_user),  # 認証ユーザーを追加
     db: Session = Depends(get_db),
 ):
     """
@@ -138,13 +155,20 @@ def get_policy_proposals(
     - created_at の降順で返却
     - 政策タグ情報も含めて返却
     """
+    # ユーザー情報を監査ログに含める
     rows = list_proposals(db=db, status_filter=status, q=q, offset=offset, limit=limit)
     return [ProposalOut.from_proposal_with_relations(proposal) for proposal in rows]
 
 
 # 投稿履歴取得エンドポイント
 @router.get("/my-submissions", response_model=dict)
-def get_my_submissions(
+@audit_log(
+    event_type=AuditEventType.DATA_READ,
+    resource="policy_proposal",
+    action="list_user_submissions"
+)
+async def get_my_submissions(  # asyncを追加
+    http_request: Request,
     offset: int = Query(0, ge=0, description="スキップ件数"),
     limit: int = Query(20, ge=1, le=100, description="取得件数"),
     current_user: dict = Depends(get_current_user),
@@ -231,7 +255,16 @@ def get_my_submissions(
 
 # 政策案の詳細取得
 @router.get("/{proposal_id}", response_model=ProposalOut)
-def get_policy_proposal_detail(proposal_id: str, db: Session = Depends(get_db)):
+@audit_log(
+    event_type=AuditEventType.DATA_READ,
+    resource="policy_proposal",
+    action="read_detail"
+)
+async def get_policy_proposal_detail(  # asyncを追加
+    http_request: Request,
+    proposal_id: str, 
+    db: Session = Depends(get_db)
+):
     """
     主キー（UUID文字列）を指定して政策案の詳細を取得する。
     政策タグ情報も含めて返却する。
@@ -244,8 +277,14 @@ def get_policy_proposal_detail(proposal_id: str, db: Session = Depends(get_db)):
 
 # 政策案のコメント一覧取得
 @router.get("/{proposal_id}/comments", response_model=list[PolicyProposalCommentResponse])
-def get_policy_proposal_comments(
-    proposal_id: str, 
+@audit_log(
+    event_type=AuditEventType.DATA_READ,
+    resource="policy_proposal_comments",
+    action="list"
+)
+async def get_policy_proposal_comments(  # asyncを追加
+    http_request: Request,
+    proposal_id: str,
     db: Session = Depends(get_db), 
     limit: int = 50, 
     offset: int = 0

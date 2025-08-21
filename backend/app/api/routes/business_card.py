@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.business_card_service import business_card_service
 from app.core.security.rate_limit.decorators import rate_limit_file_upload
+from app.core.security.audit import AuditService, AuditEventType
+from app.core.security.audit.decorators import audit_log
 
 # ログ設定
 logging.basicConfig(level=logging.DEBUG)
@@ -13,6 +15,11 @@ router = APIRouter(prefix="/business-cards", tags=["BusinessCards"])
 
 @router.post("/upload")
 @rate_limit_file_upload()
+@audit_log(
+    event_type=AuditEventType.FILE_UPLOAD,
+    resource="business_card",
+    action="upload"
+)
 async def upload_business_card(
     request: Request,
     image: UploadFile = File(...),
