@@ -17,7 +17,7 @@ class AuditService:
         self.db = db
         self.config = AuditConfig()
     
-    async def log_event(
+    def log_event(
         self,
         event_type: AuditEventType,
         user_id: Optional[str] = None,
@@ -29,7 +29,7 @@ class AuditService:
         details: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None
     ) -> AuditLog:
-        """監査イベントを記録（非同期版）"""
+        """監査イベントを記録（同期版）"""
         
         if not self.config.AUDIT_ENABLED:
             return None
