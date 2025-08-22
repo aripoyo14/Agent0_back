@@ -7,8 +7,8 @@ from uuid import UUID
 class ExpertCreate(BaseModel):
     last_name: str
     first_name: str
-    company_name: str  # 入力値として受け取り、DBではcompany_idに解決
-    department: str
+    company_name: Optional[str] = None  # 必須から外す
+    department: Optional[str] = None    # 必須から外す
     email: EmailStr
     password: str = Field(min_length=8)
     business_card_image_url: Optional[str] = None
