@@ -13,6 +13,8 @@ from app.models.user import User
 from app.models.expert import Expert
 from app.core.config import settings
 from app.core.security.session import session_manager
+from app.core.security.rbac import RBACService
+from app.core.security.rbac.permissions import Permission  # この行を追加
 
 # 認証用のOAuth2スキームを定義
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
@@ -109,29 +111,54 @@ def _get_current_entity(token: str, db: Session, model: Type[Union[User, Expert]
     return entity
 
 """ 経産省職員の認証情報を取得する関数（セッション管理版） """
-def get_current_user(token: str = Depends(oauth2_scheme), request: Request = None) -> Dict:
-    return get_current_user_authenticated(token, request)
+def get_current_user(
+    token: str = Depends(oauth2_scheme), 
+    db: Session = Depends(get_db),
+    request: Request = None
+) -> User:  # パラメータの順序を修正
+    # 認証情報を取得
+    auth_data = get_current_user_authenticated(token, request)
+    
+    # データベースからUserオブジェクトを取得
+    user_id = auth_data.get("user_id")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="ユーザーIDが取得できませんでした"
+        )
+    
+    # データベースからUserオブジェクトを取得
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="ユーザーが見つかりません"
+        )
+    
+    return user
 
 """ 外部有識者の認証情報を取得する関数（セッション管理版） """
 def get_current_expert(token: str = Depends(oauth2_scheme), request: Request = None) -> Dict:
     return get_current_user_authenticated(token, request)
 
 """ 特定の権限を要求する依存関数 """
-def require_permissions(required_permissions: list):
-    """特定の権限を要求するデコレータ"""
-    def permission_checker(current_user: Dict = Depends(get_current_user)):
-        user_permissions = current_user.get("permissions", [])
-        
-        for permission in required_permissions:
-            if permission not in user_permissions:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"権限が不足しています: {permission}"
-                )
-        
-        return current_user
-    
-    return permission_checker
+def require_permissions(*required: Permission):
+    """
+    使用例:
+        current_user: User = Depends(require_permissions(Permission.POLICY_READ))
+    """
+    def _checker(current_user: User = Depends(get_current_user)) -> User:  # 🔒 asyncを削除
+        try:
+            # RBACサービスで User から権限を解決・検証
+            RBACService.enforce_user_permissions(current_user, required)
+        except Exception:
+            # ここで例外型を細かく分けたい場合は RBAC 側で専用例外を投げてハンドリング
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Permission denied"
+            )
+        return current_user  # 以降のハンドラで User をそのまま使える
+    return _checker
 
 """ セッション管理の依存関数 """
 def get_session_manager():

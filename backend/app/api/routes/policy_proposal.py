@@ -11,13 +11,19 @@ from app.schemas.policy_proposal_comment import PolicyProposalCommentResponse
 from app.crud.policy_proposal.policy_proposal import create_proposal, create_attachment, get_proposal, list_proposals, get_user_submissions
 from app.models.policy_proposal.policy_proposal_attachments import PolicyProposalAttachment
 from app.db.session import SessionLocal
-from app.core.blob import upload_binary_to_blob
+from app.core.blob import upload_binary_to_blob, delete_blob
 from app.core.dependencies import get_current_user
 from uuid import UUID, uuid4
 import os
 from app.core.security.audit import AuditService, AuditEventType
 from app.core.security.audit.decorators import audit_log, audit_log_sync
 from app.models.user import User
+
+# 🔒 権限チェック用のインポートを追加
+from app.core.dependencies import require_permissions  # この行を追加
+from app.core.security.rbac.permissions import Permission
+
+import anyio  # 追加
 
 # FastAPIのルーターを初期化
 router = APIRouter(prefix="/policy-proposals", tags=["PolicyProposals"])
@@ -37,66 +43,119 @@ def get_db():
 
 # 新規政策案の登録用エンドポイント
 @router.post("/", response_model=ProposalOut)
-@audit_log(  
+@audit_log(
     event_type=AuditEventType.DATA_CREATE,
     resource="policy_proposal",
     action="create"
 )
+# @require_user_permissions(Permission.POLICY_CREATE)  # 🔒 この行をコメントアウト
 async def post_policy_proposal_with_attachments(
     http_request: Request,
     title: str = Form(...),
     body: str = Form(...),
-    published_by_user_id: str = Form(...),
-    status: str = Form("draft"),
+    proposal_status: str = Form("draft"),  # 🔒 status → proposal_statusにリネーム
     files: list[UploadFile] | None = File(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permissions(Permission.POLICY_CREATE)),  #  依存関係で権限チェック
 ):
 
     """
     新規政策案の登録用エンドポイント
     - title: 政策案のタイトル
     - body: 政策案の本文
-    - published_by_user_id: 政策案の公開者のユーザーID
-    - status: 政策案のステータス
+    - proposal_status: 政策案のステータス
     - files: 添付ファイル
+    
+    権限: POLICY_CREATE が必要
     """
 
     # 1) 政策案を作成
+    try:
+        published_by_user_id = UUID(str(current_user.id))
+    except ValueError as e:
+        # logger.error(f"無効なユーザーID形式: {current_user.id}, エラー: {e}") # loggerが定義されていないためコメントアウト
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="無効なユーザーID形式です"
+        )
+    
     payload = ProposalCreate(
         title=title,
         body=body,
-        published_by_user_id=UUID(published_by_user_id),
-        status=status,  # "draft" | "published" | "archived"
+        published_by_user_id=published_by_user_id,  # 🔒 文字列をUUIDに変換
+        status=proposal_status,  #  変数名を修正
     )
-    proposal = create_proposal(db=db, data=payload)
-
-    # 2) 添付（任意・複数）
-    if files:
-        attachments_out: list[AttachmentOut] = []
-        for f in files:
-            extension = os.path.splitext(f.filename)[1]
-            blob_name = f"policy_attachments/{proposal.id}/{uuid4()}{extension}"
-            file_bytes = f.file.read()
-            file_url = upload_binary_to_blob(file_bytes, blob_name)
-
-            att = create_attachment(
-                db,
-                policy_proposal_id=str(proposal.id),
-                file_name=f.filename,
-                file_url=file_url,
-                file_type=f.content_type,
-                file_size=len(file_bytes) if file_bytes is not None else None,
-                uploaded_by_user_id=str(payload.published_by_user_id),
-            )
-            # Pydantic化はレスポンス時に自動で行われるため、ここでは収集のみ
-            attachments_out.append(att)  # type: ignore
-
-        # 3) 返却用に proposal へアタッチメントを載せる
-        # SQLAlchemy オブジェクトにリストを紐付けて返すと、from_attributesでシリアライズされる
-        proposal.attachments = attachments_out  # type: ignore[attr-defined]
-
-    return proposal
+    
+    # 2) attachments_outを関数冒頭で初期化
+    attachments_out: list[AttachmentOut] = []
+    uploaded_blobs = []  # クリーンアップ用（Blob名とURL）
+    
+    try:
+        # まとめてやるなら begin ブロック
+        with db.begin():
+            # 1) 政策案を作成
+            proposal = create_proposal(db=db, data=payload)
+            
+            # 2) 添付（任意・複数）
+            if files:
+                for f in files:
+                    try:
+                        extension = os.path.splitext(f.filename)[1]
+                        blob_name = f"policy_attachments/{proposal.id}/{uuid4()}{extension}"
+                        
+                        # 🔄 非同期ファイル読み取り
+                        file_bytes = await f.read()
+                        
+                        # 🔄 anyio.to_thread.run_syncで安全なスレッド実行
+                        file_url = await anyio.to_thread.run_sync(
+                            upload_binary_to_blob, 
+                            file_bytes, 
+                            blob_name
+                        )
+                        
+                        # クリーンアップ用に記録
+                        uploaded_blobs.append((blob_name, file_url))
+                        
+                        att = create_attachment(
+                            db,
+                            policy_proposal_id=str(proposal.id),
+                            file_name=f.filename,
+                            file_url=file_url,
+                            file_type=f.content_type,
+                            file_size=len(file_bytes) if file_bytes is not None else None,
+                            uploaded_by_user_id=str(current_user.id),
+                        )
+                        attachments_out.append(att)
+                        
+                    except Exception as file_error:
+                        # 個別ファイルのエラーをログに記録
+                        # logger.error(f"ファイル {f.filename} の処理でエラー: {file_error}") # loggerが定義されていないためコメントアウト
+                        
+                        # 3) アップロードされたBlobファイルをクリーンアップ
+                        if uploaded_blobs:
+                            await _cleanup_uploaded_blobs(uploaded_blobs)
+                        
+                        raise HTTPException(
+                            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f"ファイルアップロード中にエラーが発生しました: {file_error}"
+                        )
+            
+            # 3) 返却用に proposal へアタッチメントを載せる
+            proposal.attachments = attachments_out  # type: ignore[attr-defined]
+            
+        # ここで commit 済み
+        return proposal
+        
+    except Exception as e:
+        # 必要なら Blob の削除処理を呼ぶ
+        if uploaded_blobs:
+            await _cleanup_uploaded_blobs(uploaded_blobs)
+        
+        # logger.error(f"政策案作成でエラー: {e}") # loggerが定義されていないためコメントアウト
+        raise HTTPException(
+            status_code=500, 
+            detail="政策案の作成に失敗しました"
+        ) from e
 
 
 
@@ -145,7 +204,7 @@ async def get_policy_proposals(
     q: str | None = Query(None, description="タイトル・本文の部分一致"),
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    current_user: dict = Depends(get_current_user),  # 認証ユーザーを追加
+    current_user: User = Depends(require_permissions(Permission.POLICY_READ)),  # 🔒 認証のみ
     db: Session = Depends(get_db),
 ):
     """
@@ -154,6 +213,8 @@ async def get_policy_proposals(
     - タイトル/本文の部分一致検索
     - created_at の降順で返却
     - 政策タグ情報も含めて返却
+    
+    🔒 権限: POLICY_READ が必要
     """
     # ユーザー情報を監査ログに含める
     rows = list_proposals(db=db, status_filter=status, q=q, offset=offset, limit=limit)
@@ -163,19 +224,21 @@ async def get_policy_proposals(
 # 投稿履歴取得エンドポイント
 @router.get("/my-submissions", response_model=dict)
 @audit_log(
-    event_type=AuditEventType.DATA_READ,
-    resource="policy_proposal",
+    event_type=AuditEventType.DATA_READ, 
+    resource="policy_proposal", 
     action="list_user_submissions"
 )
-async def get_my_submissions(  # asyncを追加
+async def get_my_submissions(
     http_request: Request,
     offset: int = Query(0, ge=0, description="スキップ件数"),
     limit: int = Query(20, ge=1, le=100, description="取得件数"),
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(require_permissions(Permission.POLICY_READ)),  # 🔒 権限チェックを依存関係として使用
     db: Session = Depends(get_db),
 ):
     """
     ログインユーザーが投稿した政策提案の履歴を取得する。
+    
+    🔒 権限: POLICY_READ が必要
     
     ## 機能
     - ログインユーザーが投稿した政策提案の一覧を取得
@@ -218,7 +281,8 @@ async def get_my_submissions(  # asyncを追加
     ```
     """
     try:
-        user_id = current_user.get("user_id")
+        # current_userはUserオブジェクトなので、.get()ではなく直接アクセス
+        user_id = str(current_user.id)
         if not user_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -233,24 +297,26 @@ async def get_my_submissions(  # asyncを追加
         )
         
         submissions = []
-        for submission in submissions_data:
-            proposal = submission["proposal"]
-            comment_count = submission["comment_count"]
-            submission_history = PolicySubmissionHistory.from_proposal_with_comment_count(
-                proposal=proposal,
-                comment_count=comment_count
+        for s in submissions_data:
+            proposal = s["proposal"]
+            comment_count = s["comment_count"]
+            submissions.append(
+                PolicySubmissionHistory.from_proposal_with_comment_count(
+                    proposal=proposal, 
+                    comment_count=comment_count
+                )
             )
-            submissions.append(submission_history)
         
-        return {
-            "success": True,
-            "data": submissions
-        }
+        return {"success": True, "data": submissions}
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        return {
-            "success": False,
-            "error": f"投稿履歴の取得に失敗しました: {str(e)}"
-        }
+        # ポリシーに合わせて 500 を返す（成功フラグ付き200は避ける）
+        raise HTTPException(
+            status_code=500, 
+            detail=f"投稿履歴の取得に失敗しました: {e}"
+        )
 
 
 # 政策案の詳細取得
@@ -263,11 +329,14 @@ async def get_my_submissions(  # asyncを追加
 async def get_policy_proposal_detail(  # asyncを追加
     http_request: Request,
     proposal_id: str, 
+    current_user: User = Depends(require_permissions(Permission.POLICY_READ)),  # 🔒 権限チェックを依存関係として使用
     db: Session = Depends(get_db)
 ):
     """
     主キー（UUID文字列）を指定して政策案の詳細を取得する。
     政策タグ情報も含めて返却する。
+    
+    🔒 権限: POLICY_READ が必要
     """
     proposal = get_proposal(db=db, proposal_id=proposal_id)
     if not proposal:
@@ -285,12 +354,15 @@ async def get_policy_proposal_detail(  # asyncを追加
 async def get_policy_proposal_comments(  # asyncを追加
     http_request: Request,
     proposal_id: str,
+    current_user: User = Depends(require_permissions(Permission.COMMENT_READ)),  # 🔒 権限チェックを依存関係として使用
     db: Session = Depends(get_db), 
     limit: int = 50, 
     offset: int = 0
 ):
     """
     特定の政策案IDに紐づくコメント一覧を取得する。
+    
+    🔒 権限: COMMENT_READ が必要
     
     ## 機能
     - 指定された政策案に投稿されたコメント一覧を取得
@@ -313,3 +385,18 @@ async def get_policy_proposal_comments(  # asyncを追加
     """
     from app.crud.policy_proposal.policy_proposal_comment import list_comments_by_policy_proposal_id
     return list_comments_by_policy_proposal_id(db, proposal_id, limit=limit, offset=offset)
+
+
+async def _cleanup_uploaded_blobs(uploaded_blobs: list[tuple[str, str]]):
+    """アップロードされたBlobファイルのクリーンアップ"""
+    for blob_name, file_url in uploaded_blobs:
+        try:
+            # anyio.to_thread.run_syncで安全なスレッド実行
+            await anyio.to_thread.run_sync(
+                delete_blob,  # 🔒 delete_blob_file → delete_blobに修正
+                blob_name
+            )
+            print(f"✅ Blobファイルを削除: {blob_name}")
+        except Exception as cleanup_error:
+            print(f"❌ Blobファイル削除でエラー: {cleanup_error}")
+            # クリーンアップの失敗はログに記録するが、メインエラーは発生させない
