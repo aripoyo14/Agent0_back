@@ -25,3 +25,7 @@ class AuditConfig(BaseSettings):
     class Config:
         env_prefix = "AUDIT_"
         extra = "ignore"
+
+
+# 設定インスタンスを作成
+audit_config = AuditConfig()
