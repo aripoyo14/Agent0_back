@@ -8,11 +8,15 @@ from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
 import asyncio
+import logging
 from sqlalchemy.orm import Session
 from fastapi import Request
 
 from .models import RiskLevel, ThreatType
 from .config import config
+
+# ロガーの設定
+logger = logging.getLogger(__name__)
 
 @dataclass
 class RiskFactor:
@@ -221,18 +225,33 @@ class RiskEngine:
     
     async def _calculate_geographic_distance(self, ip1: str, ip2: str) -> float:
         """IPアドレス間の地理的距離を計算"""
-        # 実装例（実際の地理情報サービスと連携）
         try:
-            # 簡易的な実装
-            return 0.0
-        except Exception:
+            if not config.GEOIP_SERVICE_ENABLED:
+                return 0.0
+            
+            # 簡易的なIP距離計算（実際の実装では地理情報サービスと連携）
+            # 本番環境では MaxMind GeoIP2 や IP2Location 等のサービスを使用
+            
+            # 例: 同じIPアドレスブロック内なら距離0
+            if ip1 == ip2:
+                return 0.0
+            
+            # 例: 異なるIPアドレスブロックなら固定距離（実際は地理情報から計算）
+            return 50.0  # 仮の値
+            
+        except Exception as e:
+            logger.warning(f"地理的距離計算でエラー: {e}")
             return 0.0
     
     async def _get_user_timezone(self, session_id: str) -> Optional[str]:
         """ユーザーのタイムゾーンを取得"""
-        # 実装例（データベースから取得）
         try:
-            # 実際の実装ではデータベースクエリ
-            return "Asia/Tokyo"  # デフォルト
-        except Exception:
+            # 実際の実装ではデータベースから取得
+            # または、IPアドレスベースで推定
+            
+            # デフォルトは日本時間
+            return "Asia/Tokyo"
+            
+        except Exception as e:
+            logger.warning(f"タイムゾーン取得でエラー: {e}")
             return None

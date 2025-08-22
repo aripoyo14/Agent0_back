@@ -49,9 +49,22 @@ class Settings(BaseSettings):
     azure_blob_container: str = Field(default="default-container", alias="AZURE_BLOB_CONTAINER")
     azure_meeting_container: str = Field(default="meetings-minutes", alias="AZURE_MEETING_CONTAINER")
 
+    # 継続的検証システム設定
+    continuous_verification_enabled: bool = Field(default=True, alias="CONTINUOUS_VERIFICATION_ENABLED")
+    continuous_verification_monitoring_only: bool = Field(default=False, alias="CONTINUOUS_VERIFICATION_MONITORING_ONLY")
+    continuous_verification_failsafe_mode: bool = Field(default=False, alias="CONTINUOUS_VERIFICATION_FAILSAFE_MODE")
+    continuous_verification_default_action: str = Field(default="DENY", alias="CONTINUOUS_VERIFICATION_DEFAULT_ACTION")
+    continuous_verification_log_level: str = Field(default="INFO", alias="CONTINUOUS_VERIFICATION_LOG_LEVEL")
+
+    # 追加の設定項目（エラーログで不足していた項目）
+    # これらは環境変数に存在するが、設定クラスで定義されていなかった項目
+    cosmos_connection_string_legacy: str = Field(default="", alias="COSMOS_CONNECTION_STRING_LEGACY")
+    azure_blob_container_legacy: str = Field(default="", alias="AZURE_BLOB_CONTAINER_LEGACY")
+    encryption_key_legacy: str = Field(default="", alias="ENCRYPTION_KEY_LEGACY")
+
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE_PATH),  # 🔒 絶対パスを指定
-        extra="ignore"
+        extra="ignore"  # 未定義の環境変数は無視
     )
 
     def get_database_url(self) -> str:
@@ -82,6 +95,38 @@ class Settings(BaseSettings):
             print(f"⚠️  SSL証明書ファイルが見つかりません: {ssl_path}")
             print(f"   期待される場所: {ssl_path.absolute()}")
             return None
+
+    def get_continuous_verification_config(self) -> dict:
+        """継続的検証システムの設定を取得"""
+        return {
+            "enabled": self.continuous_verification_enabled,
+            "monitoring_only": self.continuous_verification_monitoring_only,
+            "failsafe_mode": self.continuous_verification_failsafe_mode,
+            "default_action": self.continuous_verification_default_action,
+            "log_level": self.continuous_verification_log_level
+        }
+
+    def get_cosmos_config(self) -> dict:
+        """Cosmos DB設定を取得"""
+        return {
+            "connection_string": self.cosmos_connection_string or self.cosmos_connection_string_legacy,
+            "database_name": self.cosmos_database_name,
+            "collection_name": self.cosmos_collection_name
+        }
+
+    def get_azure_storage_config(self) -> dict:
+        """Azure Blob Storage設定を取得"""
+        return {
+            "connection_string": self.azure_storage_connection_string,
+            "container": self.azure_blob_container or self.azure_blob_container_legacy,
+            "meeting_container": self.azure_meeting_container
+        }
+
+    def get_encryption_config(self) -> dict:
+        """暗号化設定を取得"""
+        return {
+            "key": self.encryption_key or self.encryption_key_legacy
+        }
 
 settings = Settings()
 

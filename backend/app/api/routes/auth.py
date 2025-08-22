@@ -22,8 +22,13 @@ from app.core.security.rbac.service import RBACService
 from app.core.security.rate_limit.dependencies import check_auth_login_rate_limit
 
 # 既存のインポートに追加
+import uuid
 from app.crud.user import get_user_by_email
 from app.crud.expert import get_expert_by_email
+from sqlalchemy import text
+
+# アクセストークンの有効期限を設定から取得
+from app.core.config import settings
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -51,16 +56,25 @@ def login_user(
     rate_limit_check: bool = Depends(check_auth_login_rate_limit)
 ):
     
-    # デバッグログを追加
-    print(" ログイン関数が呼び出されました")
+    # 詳細なデバッグログを追加
+    print("🔍 ログイン関数が呼び出されました")
     print(f"🔍 リクエストIP: {http_request.client.host if http_request.client else 'unknown'}")
-
+    print(f"🔍 リクエストメール: {request.email}")
+    print(f"🔍 データベースセッション: {db}")
+    
     # 監査サービスの初期化
     audit_service = AuditService(db)
 
     try:
+        # データベース接続テスト
+        print("🔍 データベース接続をテスト中...")
+        test_result = db.execute(text("SELECT 1"))
+        print("✅ データベース接続成功")
+
         # 修正：暗号化されたメールアドレスでユーザーを検索
+        print("🔍 ユーザー検索中...")
         user = get_user_by_email(db, request.email)
+        print(f"🔍 ユーザー検索結果: {user}")
 
         # ユーザーが存在して、パスワードが正しい場合
         if user and verify_password(request.password, user.password_hash):
@@ -69,17 +83,31 @@ def login_user(
                 # ユーザーの権限を取得
                 user_permissions = RBACService.get_user_permissions(user)
 
-                # セッション管理を使用してログイン
-                session_create = SessionCreate(
+                # セッションIDを生成
+                session_id = str(uuid.uuid4())
+
+                # セッション管理を使用してログイン（修正版）
+                session_created = session_manager.create_session(
+                    session_id=session_id,
                     user_id=str(user.id),
                     user_type="user",
-                    permissions=list(user_permissions),
-                    ip_address=http_request.client.host if http_request.client else None,
-                    user_agent=http_request.headers.get("user-agent")
+                    metadata={
+                        "ip_address": http_request.client.host if http_request.client else None,
+                        "user_agent": http_request.headers.get("user-agent")
+                    }
                 )
-                
-                # セッション作成後、kwargsにsession_idを追加
-                session_response = session_manager.create_session(session_create)
+
+                if not session_created:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="セッションの作成に失敗しました"
+                    )
+
+                # アクセストークンとリフレッシュトークンを作成
+                access_token = session_manager._create_access_token(
+                    str(user.id), "user", list(user_permissions), session_id
+                )
+                refresh_token = session_manager._create_refresh_token(session_id)
                 
                 # 継続監視用のsession_idをkwargsに追加（安全な方法）
                 try:
@@ -89,7 +117,7 @@ def login_user(
                         # フレームのローカル変数にsession_idを追加
                         frame_locals = current_frame.f_back.f_locals
                         if 'kwargs' in frame_locals:
-                            frame_locals['kwargs']['session_id'] = session_response.session_id
+                            frame_locals['kwargs']['session_id'] = session_id
                 except Exception as e:
                     # inspectエラーが発生しても認証処理は継続
                     print(f"⚠️ 継続監視用session_id設定でエラー: {e}")
@@ -109,7 +137,7 @@ def login_user(
                             "email": request.email,
                             "role": user.role,
                             "permissions_count": len(user_permissions),
-                            "session_id": session_response.session_id
+                            "session_id": session_id
                         }
                     )
                     print("✅ 監査ログの保存に成功")
@@ -118,12 +146,13 @@ def login_user(
                     # 監査ログの保存に失敗しても認証処理は継続
                     pass
                 
+                # アクセストークンの有効期限を設定から取得
                 return {
-                    "access_token": session_response.access_token,
-                    "refresh_token": session_response.refresh_token,
-                    "session_id": session_response.session_id,
-                    "expires_in": session_response.expires_in,
-                    "token_type": session_response.token_type,
+                    "access_token": access_token,
+                    "refresh_token": refresh_token,
+                    "session_id": session_id,
+                    "expires_in": settings.access_token_expire_minutes * 60,  # 秒単位に変換
+                    "token_type": "Bearer",
                     "user_type": "user",
                     "role": user.role
                 }
@@ -155,17 +184,31 @@ def login_user(
                         detail=f"Expert権限の取得に失敗しました: {str(e)}"
                     )
 
-                # セッション管理を使用してログイン
-                session_create = SessionCreate(
+                # セッションIDを生成
+                session_id = str(uuid.uuid4())
+
+                # セッション管理を使用してログイン（修正版）
+                session_created = session_manager.create_session(
+                    session_id=session_id,
                     user_id=str(expert.id),
                     user_type="expert",
-                    permissions=list(expert_permissions),
-                    ip_address=http_request.client.host if http_request.client else None,
-                    user_agent=http_request.headers.get("user-agent")
+                    metadata={
+                        "ip_address": http_request.client.host if http_request.client else None,
+                        "user_agent": http_request.headers.get("user-agent")
+                    }
                 )
-                
-                # セッション作成後、kwargsにsession_idを追加
-                session_response = session_manager.create_session(session_create)
+
+                if not session_created:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="セッションの作成に失敗しました"
+                    )
+
+                # アクセストークンとリフレッシュトークンを作成
+                access_token = session_manager._create_access_token(
+                    str(expert.id), "expert", list(expert_permissions), session_id
+                )
+                refresh_token = session_manager._create_refresh_token(session_id)
                 
                 # 継続監視用のsession_idをkwargsに追加（安全な方法）
                 try:
@@ -175,7 +218,7 @@ def login_user(
                         # フレームのローカル変数にsession_idを追加
                         frame_locals = current_frame.f_back.f_locals
                         if 'kwargs' in frame_locals:
-                            frame_locals['kwargs']['session_id'] = session_response.session_id
+                            frame_locals['kwargs']['session_id'] = session_id
                 except Exception as e:
                     # inspectエラーが発生しても認証処理は継続
                     print(f"⚠️ 継続監視用session_id設定でエラー: {e}")
@@ -195,7 +238,7 @@ def login_user(
                             "email": request.email,
                             "role": expert.role,
                             "permissions_count": len(expert_permissions),
-                            "session_id": session_response.session_id
+                            "session_id": session_id
                         }
                     )
                     print("✅ 監査ログの保存に成功")
@@ -204,12 +247,13 @@ def login_user(
                     # 監査ログの保存に失敗しても認証処理は継続
                     pass
                 
+                # アクセストークンの有効期限を設定から取得
                 return {
-                    "access_token": session_response.access_token,
-                    "refresh_token": session_response.refresh_token,
-                    "session_id": session_response.session_id,
-                    "expires_in": session_response.expires_in,
-                    "token_type": session_response.token_type,
+                    "access_token": access_token,
+                    "refresh_token": refresh_token,
+                    "session_id": session_id,
+                    "expires_in": settings.access_token_expire_minutes * 60,  # 秒単位に変換
+                    "token_type": "Bearer",
                     "user_type": "expert",
                     "role": expert.role
                 }
