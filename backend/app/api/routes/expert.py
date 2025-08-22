@@ -53,7 +53,10 @@ async def register_expert(
         # 招待コードが提供された場合、検証と使用を行う
         issuer_info = None
         if invitation_code:
+            print(f"🔍 招待コード受信: {invitation_code}")
+            
             is_valid, code_info, message = InvitationCodeService.validate_code(invitation_code)
+            print(f"🔍 招待コード検証結果: {is_valid}, {message}")
             
             if not is_valid:
                 raise HTTPException(
@@ -61,8 +64,7 @@ async def register_expert(
                     detail=f"招待コードが無効です: {message}"
                 )
             
-            # 招待コードを使用
-            InvitationCodeService.use_code(invitation_code, expert_data.email)
+            print(f"🔍 招待コード情報: {code_info}")
             
             # 発行者情報を取得
             issuer_info = InvitationCodeService.get_issuer_info(
@@ -70,6 +72,17 @@ async def register_expert(
                 code_info["issuer_id"], 
                 code_info["issuer_type"]
             )
+            print(f"🔍 発行者情報: {issuer_info}")
+            
+            if not issuer_info:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="招待コードの発行者情報が取得できません"
+                )
+            
+            # 招待コードを使用（検証成功後）
+            InvitationCodeService.use_code(invitation_code, expert_data.email)
+            print(f"🔍 招待コード使用完了: {invitation_code}")
         
         # 1. パスワードをハッシュ化
         hashed_password = hash_password(expert_data.password)
@@ -90,6 +103,7 @@ async def register_expert(
             
             expert.invitation_code = invitation_code
             expert.invited_at = datetime.now(JST)
+
         
         # 4. MFA設定用の秘密鍵・バックアップコード生成
         totp_secret = MFAService.generate_totp_secret()
@@ -102,8 +116,8 @@ async def register_expert(
         expert.account_active = False  # MFA設定完了まで無効
         expert.registration_status = "pending_mfa"  # 登録状態を設定
         
-        # 6. 一時的な保存（MFA設定完了まで正式登録ではない）
-        db.flush()  # コミットせずにフラッシュ
+        # 6. データベースに保存（コミット）
+        db.commit()  # flush()からcommit()に変更
         
         # 7. 成功時の監査ログ
         audit_service.log_event(
