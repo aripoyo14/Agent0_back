@@ -324,7 +324,7 @@ def generate_reply_suggestion(
 ------------------------ """
 
 # コメントの評価を更新
-@router.put("/{comment_id}/rating", response_model=CommentRatingResponse)
+@router.patch("/{comment_id}/rating", response_model=CommentRatingResponse)
 def update_rating(
     comment_id: str,
     rating_in: CommentRatingCreate,
@@ -360,7 +360,7 @@ def update_rating(
     
     ## 使用例
     ```
-    PUT /api/policy-proposal-comments/7803bd7d-dc24-4730-adf9-f3e0d5c7c18a/rating
+    PATCH /api/policy-proposal-comments/7803bd7d-dc24-4730-adf9-f3e0d5c7c18a/rating
     ```
     """
     updated_comment = update_comment_rating(
