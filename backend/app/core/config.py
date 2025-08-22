@@ -12,6 +12,9 @@ load_dotenv()
 # プロジェクトルートは2つ上の親ディレクトリ
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# .envファイルの絶対パスを明示的に設定
+ENV_FILE_PATH = BASE_DIR.parent / ".env"
+
 class Settings(BaseSettings):
     # Database
     database_host: str = Field(default="localhost", alias="DATABASE_HOST")
@@ -47,8 +50,8 @@ class Settings(BaseSettings):
     azure_meeting_container: str = Field(default="meetings-minutes", alias="AZURE_MEETING_CONTAINER")
 
     model_config = SettingsConfigDict(
-        env_file=".env",  # プロジェクトルートにある.envファイルを指定
-        extra="ignore"    # 不要な.env項目は無視
+        env_file=str(ENV_FILE_PATH),  # 🔒 絶対パスを指定
+        extra="ignore"
     )
 
     def get_database_url(self) -> str:
