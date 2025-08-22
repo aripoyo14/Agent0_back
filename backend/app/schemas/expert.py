@@ -25,13 +25,21 @@ class ExpertOut(BaseModel):
     first_name: str
     company_id: Optional[UUID] = None
     department: Optional[str] = None
-    email: EmailStr
+    email: str  # EmailStrからstrに変更（暗号化対応）
     created_at: datetime
     updated_at: datetime
 
     model_config = {
         "from_attributes": True
     }
+    
+    @field_validator('email', mode='before')
+    @classmethod
+    def validate_email(cls, v):
+        """暗号化されたメールアドレスを処理"""
+        if hasattr(v, 'get_decrypted_email'):
+            return v.get_decrypted_email()
+        return v
 
 
 # Expertログイン用スキーマ

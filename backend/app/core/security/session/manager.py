@@ -18,48 +18,36 @@ class SessionManager:
         self.user_sessions: Dict[str, Set[str]] = {}
         self.blacklisted_tokens: Set[str] = set()
     
-    def create_session(self, session_create: SessionCreate) -> TokenResponse:
-        """新しいセッションを作成"""
-        session_id = str(uuid.uuid4())
-        now = datetime.now(timezone.utc)
-        
-        # アクセストークン（短期限）
-        access_token = self._create_access_token(
-            session_create.user_id,
-            session_create.user_type,
-            session_create.permissions,
-            session_id
-        )
-        
-        # リフレッシュトークン（長期限）
-        refresh_token = self._create_refresh_token(session_id)
-        
-        # セッション情報を保存
-        session_data = SessionData(
-            session_id=session_id,
-            user_id=session_create.user_id,
-            user_type=session_create.user_type,
-            permissions=session_create.permissions,
-            created_at=now,
-            last_activity=now,
-            ip_address=session_create.ip_address,
-            user_agent=session_create.user_agent,
-            is_active=True
-        )
-        
-        self.active_sessions[session_id] = session_data
-        
-        # ユーザーセッション管理
-        if session_create.user_id not in self.user_sessions:
-            self.user_sessions[session_create.user_id] = set()
-        self.user_sessions[session_create.user_id].add(session_id)
-        
-        return TokenResponse(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            session_id=session_id,
-            expires_in=settings.access_token_expire_minutes * 60
-        )
+    def create_session(self, session_id: str, user_id: str, user_type: str, metadata: dict = None) -> bool:
+        """新しいセッションを作成（session_idを指定）"""
+        try:
+            now = datetime.now(timezone.utc)
+            
+            # セッション情報を保存
+            session_data = SessionData(
+                session_id=session_id,
+                user_id=user_id,
+                user_type=user_type,
+                permissions=["read", "write"],  # デフォルト権限
+                created_at=now,
+                last_activity=now,
+                ip_address=metadata.get("ip_address") if metadata else None,
+                user_agent=metadata.get("user_agent") if metadata else None,
+                is_active=True
+            )
+            
+            self.active_sessions[session_id] = session_data
+            
+            # ユーザーセッション管理
+            if user_id not in self.user_sessions:
+                self.user_sessions[user_id] = set()
+            self.user_sessions[user_id].add(session_id)
+            
+            return True
+            
+        except Exception as e:
+            print(f"セッション作成エラー: {e}")
+            return False
     
     def _create_access_token(self, user_id: str, user_type: str, permissions: list, session_id: str) -> str:
         """アクセストークンを作成"""
@@ -174,6 +162,27 @@ class SessionManager:
             return None
         
         return session_data
+    
+    def get_session_info(self, session_id: str) -> Optional[Dict]:
+        """セッション情報を取得"""
+        session_data = self.validate_session(session_id)
+        if not session_data:
+            return None
+        
+        return {
+            "session_id": session_data.session_id,
+            "user_id": session_data.user_id,
+            "user_type": session_data.user_type,
+            "created_at": session_data.created_at.isoformat(),
+            "last_activity": session_data.last_activity.isoformat(),
+            "ip_address": session_data.ip_address,
+            "user_agent": session_data.user_agent,
+            "is_active": session_data.is_active
+        }
+    
+    def is_session_valid(self, session_id: str) -> bool:
+        """セッションが有効かどうかをチェック"""
+        return self.validate_session(session_id) is not None
 
 # グローバルセッションマネージャーインスタンス
 session_manager = SessionManager()
