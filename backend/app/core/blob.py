@@ -51,3 +51,33 @@ def upload_meeting_minutes_to_blob(file, filename: str) -> str:
     blob_client = meeting_container_client.get_blob_client(filename)
     blob_client.upload_blob(file, overwrite=True)
     return blob_client.url
+
+def delete_blob(blob_name: str) -> bool:
+    """Blobストレージからファイルを削除"""
+    try:
+        # Azure Blob Storageの削除処理
+        # 実際の実装はAzure SDKを使用
+        from azure.storage.blob import BlobServiceClient
+        import os
+        
+        # 設定から接続文字列を取得
+        connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+        container_name = os.getenv("AZURE_STORAGE_CONTAINER_NAME", "default")
+        
+        if not connection_string:
+            print(f"⚠️ AZURE_STORAGE_CONNECTION_STRINGが設定されていません")
+            return False
+        
+        blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+        container_client = blob_service_client.get_container_client(container_name)
+        blob_client = container_client.get_blob_client(blob_name)
+        
+        # Blobを削除
+        blob_client.delete_blob()
+        
+        print(f"✅ Blobファイル削除成功: {blob_name}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Blobファイル削除失敗: {blob_name}, エラー: {e}")
+        return False
