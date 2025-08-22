@@ -5,6 +5,7 @@
    有効であればJWTトークンを返す。
 """
 
+import inspect
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -27,13 +28,21 @@ from app.crud.expert import get_expert_by_email
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 # User/ExpertログインAPI (ユーザー認証を行い、アクセストークン（JWT）を発行して返す)
+# 一時的に監査ログデコレーターを無効化
+# @continuous_verification_audit(
+#     event_type=AuditEventType.AUTH_LOGIN_SUCCESS,
+#     resource="auth",
+#     action="login",
+#     user_type="user",
+#     session_id_key="session_id"
+# )
 @router.post("/login")
 @continuous_verification_audit(
     event_type=AuditEventType.AUTH_LOGIN_SUCCESS,
     resource="auth",
     action="login",
     user_type="user",
-    session_id_key="session_id"  # 明示的に指定
+    session_id_key="session_id"
 )
 def login_user(
     http_request: Request, 
@@ -72,11 +81,19 @@ def login_user(
                 # セッション作成後、kwargsにsession_idを追加
                 session_response = session_manager.create_session(session_create)
                 
-                # kwargsにsession_idを追加（継続監視用）
-                import inspect
-                frame = inspect.currentframe()
-                if frame and frame.f_back:
-                    frame.f_back.f_locals['kwargs']['session_id'] = session_response.session_id
+                # 継続監視用のsession_idをkwargsに追加（安全な方法）
+                try:
+                    # 現在のフレームを安全に取得
+                    current_frame = inspect.currentframe()
+                    if current_frame and current_frame.f_back:
+                        # フレームのローカル変数にsession_idを追加
+                        frame_locals = current_frame.f_back.f_locals
+                        if 'kwargs' in frame_locals:
+                            frame_locals['kwargs']['session_id'] = session_response.session_id
+                except Exception as e:
+                    # inspectエラーが発生しても認証処理は継続
+                    print(f"⚠️ 継続監視用session_id設定でエラー: {e}")
+                    pass
                 
                 # 成功時の監査ログ
                 try:
@@ -150,10 +167,19 @@ def login_user(
                 # セッション作成後、kwargsにsession_idを追加
                 session_response = session_manager.create_session(session_create)
                 
-                # kwargsにsession_idを追加（継続監視用）
-                frame = inspect.currentframe()
-                if frame and frame.f_back:
-                    frame.f_back.f_locals['kwargs']['session_id'] = session_response.session_id
+                # 継続監視用のsession_idをkwargsに追加（安全な方法）
+                try:
+                    # 現在のフレームを安全に取得
+                    current_frame = inspect.currentframe()
+                    if current_frame and current_frame.f_back:
+                        # フレームのローカル変数にsession_idを追加
+                        frame_locals = current_frame.f_back.f_locals
+                        if 'kwargs' in frame_locals:
+                            frame_locals['kwargs']['session_id'] = session_response.session_id
+                except Exception as e:
+                    # inspectエラーが発生しても認証処理は継続
+                    print(f"⚠️ 継続監視用session_id設定でエラー: {e}")
+                    pass
                 
                 # 成功時の監査ログ
                 try:

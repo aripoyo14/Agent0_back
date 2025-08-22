@@ -7,7 +7,7 @@ anyio==4.10.0
 attrs==25.3.0
 azure-core==1.35.0
 azure-storage-blob==12.26.0
-bcrypt==4.3.0
+bcrypt==4.0.1
 certifi==2025.8.3
 cffi==1.17.1
 charset-normalizer==3.4.2
