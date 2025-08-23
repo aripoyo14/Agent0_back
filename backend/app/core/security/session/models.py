@@ -11,6 +11,7 @@ class SessionData(BaseModel):
     session_id: str = Field(description="セッションID")
     user_id: str = Field(description="ユーザーID")
     user_type: str = Field(description="ユーザータイプ")
+    role: Optional[str] = Field(default=None, description="ユーザーロール")
     permissions: List[str] = Field(description="権限リスト")
     created_at: datetime = Field(description="作成時刻")
     last_activity: datetime = Field(description="最終アクティビティ")

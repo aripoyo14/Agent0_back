@@ -95,6 +95,7 @@ def login_user(
                     session_id=session_id,
                     user_id=str(user.id),
                     user_type="user",
+                    role=user.role,  # roleを追加
                     metadata={
                         "ip_address": http_request.client.host if http_request.client else None,
                         "user_agent": http_request.headers.get("user-agent")
@@ -109,7 +110,7 @@ def login_user(
 
                 # アクセストークンとリフレッシュトークンを作成
                 access_token = session_manager._create_access_token(
-                    str(user.id), "user", list(user_permissions), session_id
+                    str(user.id), "user", list(user_permissions), session_id, user.role
                 )
                 refresh_token = session_manager._create_refresh_token(session_id)
                 
@@ -196,6 +197,7 @@ def login_user(
                     session_id=session_id,
                     user_id=str(expert.id),
                     user_type="expert",
+                    role=expert.role,  # roleを追加
                     metadata={
                         "ip_address": http_request.client.host if http_request.client else None,
                         "user_agent": http_request.headers.get("user-agent")
@@ -210,7 +212,7 @@ def login_user(
 
                 # アクセストークンとリフレッシュトークンを作成
                 access_token = session_manager._create_access_token(
-                    str(expert.id), "expert", list(expert_permissions), session_id
+                    str(expert.id), "expert", list(expert_permissions), session_id, expert.role
                 )
                 refresh_token = session_manager._create_refresh_token(session_id)
                 

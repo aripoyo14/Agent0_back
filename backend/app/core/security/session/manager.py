@@ -21,7 +21,7 @@ class SessionManager:
         self.user_sessions: Dict[str, Set[str]] = {}
         self.blacklisted_tokens: Set[str] = set()
     
-    def create_session(self, session_id: str, user_id: str, user_type: str, metadata: dict = None) -> bool:
+    def create_session(self, session_id: str, user_id: str, user_type: str, metadata: dict = None, role: str = None) -> bool:
         """新しいセッションを作成（session_idを指定）"""
         try:
             now = datetime.now(timezone.utc)
@@ -31,6 +31,7 @@ class SessionManager:
                 session_id=session_id,
                 user_id=user_id,
                 user_type=user_type,
+                role=role,  # roleフィールドを追加
                 permissions=["read", "write"],  # デフォルト権限
                 created_at=now,
                 last_activity=now,
@@ -52,11 +53,12 @@ class SessionManager:
             logger.error(f"セッション作成エラー: {e}")
             return False
     
-    def _create_access_token(self, user_id: str, user_type: str, permissions: list, session_id: str) -> str:
+    def _create_access_token(self, user_id: str, user_type: str, permissions: list, session_id: str, role: str = None) -> str:
         """アクセストークンを作成"""
         to_encode = {
             "sub": user_id,
             "user_type": user_type,
+            "role": role,  # roleフィールドを追加
             "scope": permissions,
             "session_id": session_id,
             "token_type": "access"
@@ -103,7 +105,8 @@ class SessionManager:
                 session_data.user_id,
                 session_data.user_type,
                 session_data.permissions,
-                session_id
+                session_id,
+                session_data.role
             )
             
             # 最終アクティビティを更新
