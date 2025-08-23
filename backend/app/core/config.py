@@ -66,9 +66,30 @@ class Settings(BaseSettings):
     azure_blob_container_legacy: str = Field(default="", alias="AZURE_BLOB_CONTAINER_LEGACY")
     encryption_key_legacy: str = Field(default="", alias="ENCRYPTION_KEY_LEGACY")
 
+    # CORS設定（文字列として受け取り、手動でパース）
+    cors_allow_origins_str: str = Field(
+        default="http://localhost:3000",
+        alias="CORS_ALLOW_ORIGINS"
+    )
+    cors_allow_credentials: bool = Field(default=True, alias="CORS_ALLOW_CREDENTIALS")
+    cors_allow_methods_str: str = Field(
+        default="GET,POST,PUT,DELETE,OPTIONS",
+        alias="CORS_ALLOW_METHODS"
+    )
+    cors_allow_headers_str: str = Field(
+        default="*",
+        alias="CORS_ALLOW_HEADERS"
+    )
+    cors_max_age: int = Field(default=86400, alias="CORS_MAX_AGE")  # 24時間
+    
+    # 環境設定
+    environment: str = Field(default="development", alias="ENVIRONMENT")
+
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE_PATH),  # 🔒 絶対パスを指定
-        extra="ignore"  # 未定義の環境変数は無視
+        extra="ignore",  # 未定義の環境変数は無視
+        env_parse_none_str=None,  # 空文字列をNoneとして扱う
+        env_parse_json_values=True,  # JSON値を自動パース
     )
 
     def get_database_url(self) -> str:
@@ -131,6 +152,63 @@ class Settings(BaseSettings):
         return {
             "key": self.encryption_key or self.encryption_key_legacy
         }
+
+    @property
+    def is_production(self) -> bool:
+        """本番環境かどうかを判定"""
+        return self.environment.lower() in ["production", "prod"]
+    
+    @property
+    def is_staging(self) -> bool:
+        """ステージング環境かどうかを判定"""
+        return self.environment.lower() in ["staging", "stg"]
+    
+    @property
+    def is_development(self) -> bool:
+        """開発環境かどうかを判定"""
+        return self.environment.lower() in ["development", "dev"]
+    
+    @property
+    def cors_allow_origins(self) -> list[str]:
+        """CORSオリジンのリストを取得"""
+        return [origin.strip() for origin in self.cors_allow_origins_str.split(",")]
+    
+    @property
+    def cors_allow_methods(self) -> list[str]:
+        """CORSメソッドのリストを取得"""
+        return [method.strip() for method in self.cors_allow_methods_str.split(",")]
+    
+    @property
+    def cors_allow_headers(self) -> list[str]:
+        """CORSヘッダーのリストを取得"""
+        if self.cors_allow_headers_str == "*":
+            return ["*"]
+        return [header.strip() for header in self.cors_allow_headers_str.split(",")]
+    
+    def get_cors_origins(self) -> list[str]:
+        """環境に応じたCORSオリジンを取得"""
+        if self.is_production:
+            # 本番環境でも環境変数を優先
+            if self.cors_allow_origins_str and "localhost" not in self.cors_allow_origins_str:
+                return self.cors_allow_origins
+            else:
+                # 環境変数が設定されていない場合のフォールバック
+                return [
+                    "https://aps-agent0-02-afawambwf2bxd2fv.italynorth-01.azurewebsites.net",
+                ]
+        elif self.is_staging:
+            # ステージング環境
+            return [
+                "https://staging-your-app.azurewebsites.net",
+                "http://localhost:3000",  # 開発者用
+            ]
+        else:
+            # 開発環境
+            return [
+                "http://localhost:3000",
+                "http://127.0.0.1:3000",
+                "http://localhost:3001",  # 別ポートも許可
+            ]
 
 settings = Settings()
 

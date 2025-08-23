@@ -1,31 +1,27 @@
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 import logging
 from app.api.routes import user, auth, policy_proposal_comment, policy_proposal, cosmos_minutes, outreach, expert, search_network_map, meeting, network_routes, business_card, invitation_code
 import app.models
 from app.core.startup import init_external_services
 from app.core.security.mfa import mfa_router
 from app.core.security.audit.router import router as audit_router
+from app.core.security.cors import get_cors_middleware_config, get_cors_config
+from app.core.config import get_settings
 
 # ロガーの設定
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-""" ----------
- CORS 設定（フロントエンドのNext.js開発サーバと連携するため）
- ---------- """
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://aps-agent0-02-afawambwf2bxd2fv.italynorth-01.azurewebsites.net",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# 環境別CORS設定
+app.add_middleware(CORSMiddleware, **get_cors_middleware_config())
+
+# CORS設定のログ出力（デバッグ用）
+settings = get_settings()
+logger.info(f"環境: {settings.environment}")
+logger.info(f"CORS設定: {get_cors_config()}")
 
 @app.on_event("startup")
 async def startup_event():

@@ -3,7 +3,7 @@
 """
 
 from pydantic import BaseModel, Field
-from typing import Dict, Any
+from typing import Dict, Any, Optional, List, Tuple
 
 class RateLimitConfig(BaseModel):
     """レート制限の設定"""
@@ -12,7 +12,7 @@ class RateLimitConfig(BaseModel):
     enabled: bool = Field(default=True, description="レート制限を有効にするか")
     default_max_requests: int = Field(default=100, description="デフォルトの最大リクエスト数")
     default_window_seconds: int = Field(default=60, description="デフォルトの時間枠（秒）")
-    
+     
     # ログインAPIの制限（3回間違えると1分間ログインできない）
     auth_login_max_requests: int = Field(default=3, description="ログインの最大試行回数")
     auth_login_window_seconds: int = Field(default=60, description="ログイン制限の時間枠（秒）")
