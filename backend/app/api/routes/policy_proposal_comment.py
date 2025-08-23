@@ -4,10 +4,11 @@
  - コメント投稿（POST）を受け取り、バリデーション・DB登録処理を行う。
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from typing import Dict, List, Tuple, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, desc
+import uuid
 from app.schemas.policy_proposal_comment import (
     PolicyProposalCommentCreate,
     PolicyProposalCommentResponse,
@@ -17,6 +18,8 @@ from app.schemas.policy_proposal_comment import (
     CommentRatingCreate,
     CommentRatingResponse,
     PolicyProposalCommentsCountResponse,
+    RepliesResponse,
+    ReplyCountResponse,
 )
 from app.crud.policy_proposal.policy_proposal_comment import (
     create_comment,
@@ -26,14 +29,25 @@ from app.crud.policy_proposal.policy_proposal_comment import (
     create_reply,
     update_comment_rating,
     get_comment_count_by_policy_proposal,
+    get_replies_by_parent_comment_id,
+    get_reply_count_by_parent_comment_id,
 )
 from app.services.openai import generate_ai_reply
+from datetime import datetime
 from app.services.file_analyzer import extract_file_content
 from app.services.file_analyzer_full import extract_file_content_full, compare_analysis_results
 from app.db.session import SessionLocal
 from app.crud.policy_proposal.policy_proposal import list_attachments_by_policy_proposal_id
 from app.schemas.policy_proposal.policy_proposal import AttachmentOut
 from app.core.security.rate_limit.decorators import rate_limit_comment_post
+
+def is_valid_uuid(uuid_string: str) -> bool:
+    """UUID形式の検証"""
+    try:
+        uuid.UUID(uuid_string)
+        return True
+    except ValueError:
+        return False
 
 
 # FastAPIのルーターを初期化
@@ -80,6 +94,7 @@ async def post_comment(
       "comment_text": "コメント内容",
       "parent_comment_id": null
     }
+    ```
     """
     try:
         comment = create_comment(db=db, comment_in=comment_in)
@@ -614,4 +629,134 @@ def get_comment_count_by_policy_proposal_endpoint(
         raise HTTPException(
             status_code=500,
             detail=f"コメント数取得中にエラーが発生しました: {str(e)}"
+        )
+
+# 返信コメント取得API
+@router.get("/{parent_comment_id}/replies", response_model=RepliesResponse)
+def get_replies_by_parent_comment(
+    parent_comment_id: str,
+    limit: int = Query(20, ge=1, le=100, description="取得件数制限"),
+    offset: int = Query(0, ge=0, description="オフセット"),
+    db: Session = Depends(get_db)
+):
+    """
+    指定された親コメントに対する返信コメント一覧を取得する。
+    
+    ## 機能
+    - 指定された親コメントに対する返信コメント一覧を取得
+    - ページネーション対応（limit/offset）
+    - 投稿日時の昇順でソート
+    - 論理削除されたコメントは除外
+    
+    ## パラメータ
+    - `parent_comment_id`: 親コメントID（パスパラメータ）
+    - `limit`: 取得件数制限（デフォルト: 20, 最大: 100）
+    - `offset`: オフセット（デフォルト: 0）
+    
+    ## レスポンス
+    - 親コメントが見つからない場合: 404 Not Found
+    - 成功時: 返信コメント一覧とメタ情報
+    
+    ## 使用例
+    ```
+    GET /api/policy-proposal-comments/7803bd7d-dc24-4730-adf9-f3e0d5c7c18a/replies?limit=10&offset=0
+    ```
+    
+    ## レスポンス例
+    ```json
+    {
+      "replies": [
+        {
+          "id": "uuid",
+          "comment_text": "返信内容",
+          "author_type": "staff",
+          "author_id": "uuid",
+          "author_name": "投稿者名",
+          "posted_at": "2025-01-01T00:00:00Z",
+          "parent_comment_id": "uuid"
+        }
+      ],
+      "total_count": 5,
+      "has_more": true
+    }
+    ```
+    """
+    try:
+        # UUID形式の検証
+        if not is_valid_uuid(parent_comment_id):
+            raise HTTPException(
+                status_code=400, 
+                detail="Invalid comment ID format"
+            )
+        
+        # 返信コメントを取得
+        replies = get_replies_by_parent_comment_id(db, parent_comment_id, limit, offset)
+        
+        # 総件数を取得
+        total_count = get_reply_count_by_parent_comment_id(db, parent_comment_id)
+        
+        # 次のページがあるかどうかを判定
+        has_more = (offset + limit) < total_count
+        
+        return RepliesResponse(
+            replies=replies,
+            total_count=total_count,
+            has_more=has_more
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error while fetching replies"
+        )
+
+# 返信コメント件数取得API
+@router.get("/{parent_comment_id}/replies/count", response_model=ReplyCountResponse)
+def get_reply_count_by_parent_comment(
+    parent_comment_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    指定された親コメントに対する返信コメント数を取得する。
+    
+    ## 機能
+    - 指定された親コメントに対する返信コメント数を取得
+    - 論理削除されたコメントは除外
+    
+    ## パラメータ
+    - `parent_comment_id`: 親コメントID（パスパラメータ）
+    
+    ## レスポンス
+    - 親コメントが見つからない場合: 404 Not Found
+    - 成功時: 返信コメント数
+    
+    ## 使用例
+    ```
+    GET /api/policy-proposal-comments/7803bd7d-dc24-4730-adf9-f3e0d5c7c18a/replies/count
+    ```
+    
+    ## レスポンス例
+    ```json
+    {
+      "reply_count": 5
+    }
+    ```
+    """
+    try:
+        # UUID形式の検証
+        if not is_valid_uuid(parent_comment_id):
+            raise HTTPException(
+                status_code=400, 
+                detail="Invalid comment ID format"
+            )
+        
+        reply_count = get_reply_count_by_parent_comment_id(db, parent_comment_id)
+        return ReplyCountResponse(reply_count=reply_count)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error while fetching reply count"
         )
