@@ -4,15 +4,18 @@
 
 from fastapi import Request, HTTPException, status, Depends
 from fastapi.responses import JSONResponse
+import logging
 from .service import rate_limit_service
 from .models import RateLimitRule, RateLimitType
 from .config import default_config
 
+# ロガーの設定
+logger = logging.getLogger(__name__)
 
 """認証ログインのレート制限チェック"""
 def check_auth_login_rate_limit(request: Request):
     
-    print(f"🔍 レート制限依存性: チェック開始")
+    logger.debug("レート制限依存性: チェック開始")
     
     # レート制限ルールを作成
     rule = RateLimitRule(
@@ -27,7 +30,7 @@ def check_auth_login_rate_limit(request: Request):
     is_allowed, violation = rate_limit_service.check_rate_limit(request, rule)
     
     if not is_allowed:
-        print(f"🚫 レート制限違反: {violation}")
+        logger.warning(f"レート制限違反: {violation}")
         # レート制限ヘッダーを設定
         headers = {
             "X-RateLimit-Limit": str(rule.max_requests),
@@ -42,13 +45,13 @@ def check_auth_login_rate_limit(request: Request):
             headers=headers
         )
     
-    print(f"✅ レート制限チェック通過")
+    logger.debug("レート制限チェック通過")
     return True
 
 """ユーザー登録のレート制限チェック"""
 def check_user_register_rate_limit(request: Request):
     
-    print(f"�� ユーザー登録レート制限依存性: チェック開始")
+    logger.debug("ユーザー登録レート制限依存性: チェック開始")
     
     # レート制限ルールを作成
     rule = RateLimitRule(
@@ -63,7 +66,7 @@ def check_user_register_rate_limit(request: Request):
     is_allowed, violation = rate_limit_service.check_rate_limit(request, rule)
     
     if not is_allowed:
-        print(f"🚫 ユーザー登録レート制限違反: {violation}")
+        logger.warning(f"ユーザー登録レート制限違反: {violation}")
         # レート制限ヘッダーを設定
         headers = {
             "X-RateLimit-Limit": str(rule.max_requests),
@@ -78,13 +81,13 @@ def check_user_register_rate_limit(request: Request):
             headers=headers
         )
     
-    print(f"✅ ユーザー登録レート制限チェック通過")
+    logger.debug("ユーザー登録レート制限チェック通過")
     return True
 
 """エキスパート登録のレート制限チェック"""
 def check_expert_register_rate_limit(request: Request):
         
-    print(f"�� エキスパート登録レート制限依存性: チェック開始")
+    logger.debug("エキスパート登録レート制限依存性: チェック開始")
     
     # レート制限ルールを作成
     rule = RateLimitRule(
@@ -99,7 +102,7 @@ def check_expert_register_rate_limit(request: Request):
     is_allowed, violation = rate_limit_service.check_rate_limit(request, rule)
     
     if not is_allowed:
-        print(f"�� エキスパート登録レート制限違反: {violation}")
+        logger.warning(f"エキスパート登録レート制限違反: {violation}")
         # レート制限ヘッダーを設定
         headers = {
             "X-RateLimit-Limit": str(rule.max_requests),
@@ -114,5 +117,5 @@ def check_expert_register_rate_limit(request: Request):
             headers=headers
         )
     
-    print(f"✅ エキスパート登録レート制限チェック通過")
+    logger.debug("エキスパート登録レート制限チェック通過")
     return True

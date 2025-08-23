@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
+import logging
 from app.schemas.expert import ExpertCreate, ExpertOut, ExpertLoginRequest, ExpertLoginResponse, ExpertInsightsOut, ExpertRegisterResponse
 from app.core.security import hash_password
 from app.db.session import SessionLocal
@@ -19,6 +20,9 @@ from app.core.security.session.manager import session_manager
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 import uuid
+
+# ロガーの設定
+logger = logging.getLogger(__name__)
 
 # 日本標準時間取得
 JST = timezone(timedelta(hours=9))
@@ -78,10 +82,10 @@ async def register_expert(
         # 招待コードが提供された場合、検証と使用を行う
         issuer_info = None
         if invitation_code:
-            print(f"🔍 招待コード受信: {invitation_code}")
+            logger.debug(f"招待コード受信: {invitation_code}")
             
             is_valid, code_info, message = InvitationCodeService.validate_code(invitation_code)
-            print(f"🔍 招待コード検証結果: {is_valid}, {message}")
+            logger.debug(f"招待コード検証結果: {is_valid}, {message}")
             
             if not is_valid:
                 raise HTTPException(
@@ -89,7 +93,7 @@ async def register_expert(
                     detail=f"招待コードが無効です: {message}"
                 )
             
-            print(f"🔍 招待コード情報: {code_info}")
+            logger.debug(f"招待コード情報: {code_info}")
             
             # 発行者情報を取得
             issuer_info = InvitationCodeService.get_issuer_info(
@@ -97,7 +101,7 @@ async def register_expert(
                 code_info["issuer_id"], 
                 code_info["issuer_type"]
             )
-            print(f"🔍 発行者情報: {issuer_info}")
+            logger.debug(f"発行者情報: {issuer_info}")
             
             if not issuer_info:
                 raise HTTPException(
@@ -107,7 +111,7 @@ async def register_expert(
             
             # 招待コードを使用（検証成功後）
             InvitationCodeService.use_code(invitation_code, expert_data.email)
-            print(f"🔍 招待コード使用完了: {invitation_code}")
+            logger.debug(f"招待コード使用完了: {invitation_code}")
         
         # 1. パスワードをハッシュ化
         hashed_password = hash_password(expert_data.password)
@@ -234,11 +238,11 @@ async def login_expert(
     try:
         cv_service = get_continuous_verification_service(db)
         session_id = generate_session_id()
-        print(f"🔍 継続的検証サービス初期化完了: {cv_service}")
-        print(f"🔍 セッションID生成: {session_id}")
+        logger.debug(f"継続的検証サービス初期化完了: {cv_service}")
+        logger.debug(f"セッションID生成: {session_id}")
         
     except Exception as cv_init_error:
-        print(f"⚠️ 継続的検証サービス初期化エラー: {cv_init_error}")
+        logger.warning(f"継続的検証サービス初期化エラー: {cv_init_error}")
         import traceback
         traceback.print_exc()
         # 継続的検証が失敗してもログイン処理は続行
@@ -253,15 +257,15 @@ async def login_expert(
                         request=http_request,
                         user_type="expert_login_attempt"
                     )
-                print(f"🔍 ログイン前リスク評価完了")
+                logger.debug(f"ログイン前リスク評価完了")
             except Exception as cv_monitor_error:
-                print(f"⚠️ ログイン前リスク評価エラー: {cv_monitor_error}")
+                logger.warning(f"ログイン前リスク評価エラー: {cv_monitor_error}")
                 import traceback
                 traceback.print_exc()
         
         # メールでexpertを検索
         expert = get_expert_by_email(db, email=request.email)
-        print(f"🔍 エキスパート検索結果: {expert.id if expert else 'Not found'}")
+        logger.debug(f"エキスパート検索結果: {expert.id if expert else 'Not found'}")
         
         # expertが存在しない or パスワードが間違っている場合はエラー
         if not expert or not verify_password(request.password, expert.password_hash):
@@ -273,9 +277,9 @@ async def login_expert(
                         request=http_request,
                         user_type="expert_login_failure"
                     )
-                    print(f" ログイン失敗時のリスク記録完了")
+                    logger.debug(f" ログイン失敗時のリスク記録完了")
                 except Exception as cv_error:
-                    print(f"⚠️ ログイン失敗時のリスク記録エラー: {cv_error}")
+                    logger.warning(f"ログイン失敗時のリスク記録エラー: {cv_error}")
             
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -291,9 +295,9 @@ async def login_expert(
                     user_id=str(expert.id),
                     user_type="expert"
                 )
-                print(f" ログイン成功時のリスク評価完了")
+                logger.debug(f" ログイン成功時のリスク評価完了")
             except Exception as cv_error:
-                print(f"⚠️ ログイン成功時のリスク評価エラー: {cv_error}")
+                logger.warning(f"ログイン成功時のリスク評価エラー: {cv_error}")
                 import traceback
                 traceback.print_exc()
 
@@ -308,19 +312,19 @@ async def login_expert(
             token_data["session_id"] = session_id
         
         token = create_access_token(token_data)
-        print(f"🔍 JWTトークン発行完了: {token[:20]}...")
-        print(f"🔍 トークンに含まれるセッションID: {session_id}")
+        logger.debug(f"JWTトークン発行完了: {token[:20]}...")
+        logger.debug(f"トークンに含まれるセッションID: {session_id}")
 
         # セッション管理に登録（エラーハンドリング強化）
         if session_id:
             try:
-                print(f"🔍 セッション管理登録開始: session_id={session_id}")
-                print(f"🔍 セッション管理オブジェクト: {session_manager}")
-                print(f" セッション管理オブジェクトの型: {type(session_manager)}")
+                logger.debug(f"セッション管理登録開始: session_id={session_id}")
+                logger.debug(f"セッション管理オブジェクト: {session_manager}")
+                logger.debug(f"セッション管理オブジェクトの型: {type(session_manager)}")
                 
                 # セッション管理の現在の状態を確認
-                print(f"🔍 現在のアクティブセッション数: {len(session_manager.active_sessions)}")
-                print(f"🔍 現在のアクティブセッション: {list(session_manager.active_sessions.keys())}")
+                logger.debug(f"現在のアクティブセッション数: {len(session_manager.active_sessions)}")
+                logger.debug(f"現在のアクティブセッション: {list(session_manager.active_sessions.keys())}")
                 
                 # セッション作成の詳細情報
                 session_create_data = {
@@ -330,7 +334,7 @@ async def login_expert(
                     "ip_address": cv_service._get_client_ip(http_request) if cv_service else "unknown",
                     "user_agent": http_request.headers.get("user-agent")
                 }
-                print(f"🔍 セッション作成データ: {session_create_data}")
+                logger.debug(f"セッション作成データ: {session_create_data}")
                 
                 # セッション管理への登録
                 session_manager.create_session(
@@ -343,19 +347,19 @@ async def login_expert(
                         "user_agent": http_request.headers.get("user-agent")
                     }
                 )
-                print(f"🔍 セッション管理登録完了")
-                print(f" 登録後のアクティブセッション数: {len(session_manager.active_sessions)}")
-                print(f"🔍 登録後のアクティブセッション: {list(session_manager.active_sessions.keys())}")
+                logger.debug(f"セッション管理登録完了")
+                logger.debug(f"登録後のアクティブセッション数: {len(session_manager.active_sessions)}")
+                logger.debug(f"登録後のアクティブセッション: {list(session_manager.active_sessions.keys())}")
                 
                 # 登録されたセッションの確認
                 if session_id in session_manager.active_sessions:
-                    print(f"🔍 セッション登録確認: {session_manager.active_sessions[session_id]}")
+                    logger.debug(f"セッション登録確認: {session_manager.active_sessions[session_id]}")
                 else:
-                    print(f"⚠️ セッション登録失敗: {session_id} が見つかりません")
-                    print(f"⚠️ 利用可能なセッション: {list(session_manager.active_sessions.keys())}")
+                    logger.warning(f"セッション登録失敗: {session_id} が見つかりません")
+                    logger.warning(f"利用可能なセッション: {list(session_manager.active_sessions.keys())}")
                 
             except Exception as session_error:
-                print(f"⚠️ セッション管理エラー: {session_error}")
+                logger.warning(f"セッション管理エラー: {session_error}")
                 import traceback
                 traceback.print_exc()
                 # セッション管理が失敗してもログイン処理は続行
@@ -373,7 +377,7 @@ async def login_expert(
         )
 
         # トークンとexpert情報をレスポンスとして返す
-        print(f"🔍 ログイン処理完了、レスポンス返却")
+        logger.debug(f"ログイン処理完了、レスポンス返却")
         return ExpertLoginResponse(
             access_token=token,
             expert=expert_response
@@ -382,7 +386,7 @@ async def login_expert(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ ログイン処理エラー詳細: {str(e)}")
+        logger.error(f"ログイン処理エラー詳細: {str(e)}")
         import traceback
         traceback.print_exc()
         
@@ -395,7 +399,7 @@ async def login_expert(
                     user_type="expert_login_error"
                 )
             except Exception as cv_error:
-                print(f"⚠️ エラー時のリスク記録エラー: {cv_error}")
+                logger.warning(f"エラー時のリスク記録エラー: {cv_error}")
         
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -418,31 +422,31 @@ async def get_expert_profile(
         payload = decode_access_token(token.credentials)
         
         # デバッグ用：トークンの内容を詳細にログ出力
-        print(f"🔍 トークンペイロード: {payload}")
-        print(f"🔍 利用可能なフィールド: {list(payload.keys())}")
+        logger.debug(f"トークンペイロード: {payload}")
+        logger.debug(f"利用可能なフィールド: {list(payload.keys())}")
         
         expert_id = payload.get("sub")
         role = payload.get("role")
         user_type = payload.get("user_type")
         session_id = payload.get("session_id")
         
-        print(f"🔍 抽出された値:")
-        print(f"   - expert_id: {expert_id}")
-        print(f"   - role: {role}")
-        print(f"   - user_type: {user_type}")
-        print(f"   - session_id: {session_id}")
+        logger.debug(f"抽出された値:")
+        logger.debug(f"   - expert_id: {expert_id}")
+        logger.debug(f"   - role: {role}")
+        logger.debug(f"   - user_type: {user_type}")
+        logger.debug(f"   - session_id: {session_id}")
         
         # トークン検証の条件を修正
         if not expert_id or user_type != "expert":
-            print(f"❌ トークン検証失敗:")
-            print(f"   - expert_id存在: {bool(expert_id)}")
-            print(f"   - user_type一致: {user_type == 'expert'}")
+            logger.warning(f"トークン検証失敗:")
+            logger.warning(f"   - expert_id存在: {bool(expert_id)}")
+            logger.warning(f"   - user_type一致: {user_type == 'expert'}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="無効なトークンです。"
             )
         
-        print(f"✅ トークン検証成功")
+        logger.debug(f"トークン検証成功")
         
         # セッションの有効性確認
         if session_id and not session_manager.is_session_valid(session_id):
@@ -472,7 +476,7 @@ async def get_expert_profile(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ 予期しないエラー: {str(e)}")
+        logger.error(f"予期しないエラー: {str(e)}")
         import traceback
         traceback.print_exc()
         

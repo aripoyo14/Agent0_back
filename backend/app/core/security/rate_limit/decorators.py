@@ -4,6 +4,7 @@ FastAPIエンドポイントにレート制限を適用するためのデコレ�
 """
 
 import functools
+import logging
 from typing import Optional, Union
 from fastapi import Request, HTTPException, status
 from fastapi.responses import JSONResponse
@@ -11,6 +12,9 @@ from fastapi.responses import JSONResponse
 from .service import rate_limit_service
 from .models import RateLimitRule, RateLimitType
 from .config import default_config
+
+# ロガーの設定
+logger = logging.getLogger(__name__)
 
 def rate_limit(
     max_requests: int,
@@ -52,12 +56,12 @@ def rate_limit(
             
             # リクエストオブジェクトが見つからない場合
             if not request:
-                print(f"⚠️  レート制限デコレータ: Requestオブジェクトが見つかりません")
-                print(f"   args: {args}")
-                print(f"   kwargs: {kwargs}")
+                logger.warning(f"レート制限デコレータ: Requestオブジェクトが見つかりません")
+                logger.warning(f" args: {args}")
+                logger.warning(f" kwargs: {kwargs}")
                 return await func(*args, **kwargs)
             
-            print(f"🔍 レート制限デコレータ: Requestオブジェクトを発見")
+            logger.debug(f"レート制限デコレータ: Requestオブジェクトを発見")
             
             # ルール名を決定
             rule_name_final = rule_name or f"{func.__name__}_{request_type.value}"
@@ -115,44 +119,44 @@ def rate_limit(
             response = await func(*args, **kwargs)
 
             # より詳細なデバッグ情報を追加
-            print(f"🔍 レスポンスオブジェクト詳細:")
-            print(f"   型: {type(response)}")
-            print(f"   属性: {dir(response)}")
-            print(f"   ヘッダー属性: {hasattr(response, 'headers')}")
-            print(f"   ボディ属性: {hasattr(response, 'body')}")
-            print(f"   ステータスコード属性: {hasattr(response, 'status_code')}")
+            logger.debug(f"レスポンスオブジェクト詳細:")
+            logger.debug(f"  型: {type(response)}")
+            logger.debug(f"  属性: {dir(response)}")
+            logger.debug(f"  ヘッダー属性: {hasattr(response, 'headers')}")
+            logger.debug(f"  ボディ属性: {hasattr(response, 'body')}")
+            logger.debug(f"  ステータスコード属性: {hasattr(response, 'status_code')}")
             
             # レスポンスにヘッダーを追加（確実な方法）
             try:
-                print(f"🔧 レスポンスヘッダー設定開始:")
-                print(f"   ヘッダー内容: {headers}")
+                logger.debug(f"レスポンスヘッダー設定開始:")
+                logger.debug(f"  ヘッダー内容: {headers}")
                 
                 # 常に新しいレスポンスを作成してヘッダーを設定
                 if isinstance(response, dict):
-                    print(f"✅ 辞書レスポンス、JSONResponseで再作成")
+                    logger.debug(f"辞書レスポンス、JSONResponseで再作成")
                     new_response = JSONResponse(
                         status_code=200,
                         content=response,
                         headers=headers
                     )
-                    print(f"   新しいレスポンス作成完了: {type(new_response)}")
+                    logger.debug(f"  新しいレスポンス作成完了: {type(new_response)}")
                     return new_response
                 elif hasattr(response, 'body') and hasattr(response, 'status_code'):
-                    print(f"✅ 既存レスポンス、JSONResponseで再作成")
+                    logger.debug(f"既存レスポンス、JSONResponseで再作成")
                     return JSONResponse(
                         status_code=response.status_code,
                         content=response.body,
                         headers=headers
                     )
                 else:
-                    print(f"⚠️  特殊なレスポンス、JSONResponseで再作成")
+                    logger.warning(f"特殊なレスポンス、JSONResponseで再作成")
                     return JSONResponse(
                         status_code=200,
                         content=response,
                         headers=headers
                     )
             except Exception as e:
-                print(f"❌ レスポンスヘッダー設定エラー: {e}")
+                logger.error(f"レスポンスヘッダー設定エラー: {e}")
                 # エラーが発生した場合は元のレスポンスを返す
                 return response
         

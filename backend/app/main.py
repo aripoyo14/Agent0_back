@@ -1,12 +1,15 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+import logging
 from app.api.routes import user, auth, policy_proposal_comment, policy_proposal, cosmos_minutes, outreach, expert, search_network_map, meeting, network_routes, business_card, invitation_code
 import app.models
 from app.core.startup import init_external_services
 from app.core.security.mfa import mfa_router
 from app.core.security.audit.router import router as audit_router
 
+# ロガーの設定
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -27,9 +30,9 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     await init_external_services()
-    # レート制限サービスの初期化を確認（この部分を修正）
+    # レート制限サービスの初期化を確認
     from app.core.security.rate_limit.service import rate_limit_service
-    print(f" レート制限サービス状態: {rate_limit_service.config.enabled}")
+    logger.info(f"レート制限サービス初期化完了: enabled={rate_limit_service.config.enabled}")
 
 """ ----------
  ルーター登録

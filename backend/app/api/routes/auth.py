@@ -6,6 +6,7 @@
 """
 
 import inspect
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -20,6 +21,9 @@ from app.models.user import User
 from app.models.expert import Expert
 from app.core.security.rbac.service import RBACService
 from app.core.security.rate_limit.dependencies import check_auth_login_rate_limit
+
+# ロガーの設定
+logger = logging.getLogger(__name__)
 
 # 既存のインポートに追加
 import uuid
@@ -57,28 +61,28 @@ def login_user(
 ):
     
     # 詳細なデバッグログを追加
-    print("🔍 ログイン関数が呼び出されました")
-    print(f"🔍 リクエストIP: {http_request.client.host if http_request.client else 'unknown'}")
-    print(f"🔍 リクエストメール: {request.email}")
-    print(f"🔍 データベースセッション: {db}")
+    logger.debug("ログイン関数が呼び出されました")
+    logger.debug(f"リクエストIP: {http_request.client.host if http_request.client else 'unknown'}")
+    logger.debug(f"リクエストメール: {request.email}")
+    logger.debug(f"データベースセッション: {db}")
     
     # 監査サービスの初期化
     audit_service = AuditService(db)
 
     try:
         # データベース接続テスト
-        print("🔍 データベース接続をテスト中...")
+        logger.debug("データベース接続をテスト中...")
         test_result = db.execute(text("SELECT 1"))
-        print("✅ データベース接続成功")
+        logger.debug("データベース接続成功")
 
         # 修正：暗号化されたメールアドレスでユーザーを検索
-        print("🔍 ユーザー検索中...")
+        logger.debug("ユーザー検索中...")
         user = get_user_by_email(db, request.email)
-        print(f"🔍 ユーザー検索結果: {user}")
+        logger.debug(f"ユーザー検索結果: {user}")
 
         # ユーザーが存在して、パスワードが正しい場合
         if user and verify_password(request.password, user.password_hash):
-                print(f"✅ ユーザー認証成功: {user.email}")
+                logger.debug(f"ユーザー認証成功: {user.email}")
 
                 # ユーザーの権限を取得
                 user_permissions = RBACService.get_user_permissions(user)
@@ -120,7 +124,7 @@ def login_user(
                             frame_locals['kwargs']['session_id'] = session_id
                 except Exception as e:
                     # inspectエラーが発生しても認証処理は継続
-                    print(f"⚠️ 継続監視用session_id設定でエラー: {e}")
+                    logger.warning(f"継続監視用session_id設定でエラー: {e}")
                     pass
                 
                 # 成功時の監査ログ
@@ -140,9 +144,9 @@ def login_user(
                             "session_id": session_id
                         }
                     )
-                    print("✅ 監査ログの保存に成功")
+                    logger.debug("監査ログの保存に成功")
                 except Exception as audit_error:
-                    print(f"⚠️ 監査ログの保存に失敗: {audit_error}")
+                    logger.warning(f"監査ログの保存に失敗: {audit_error}")
                     # 監査ログの保存に失敗しても認証処理は継続
                     pass
                 
@@ -159,9 +163,9 @@ def login_user(
         else:
             # 修正: userがNoneの場合を考慮
             if user:
-                print(f"❌ ユーザーパスワード検証失敗: {user.email}")
+                logger.warning(f"ユーザーパスワード検証失敗: {user.email}")
             else:
-                print(f"❌ ユーザーが見つかりません: {request.email}")
+                logger.warning(f"ユーザーが見つかりません: {request.email}")
         
         # Userで見つからない場合、Expertテーブルで検索
         if not user:
@@ -169,16 +173,16 @@ def login_user(
             if expert and verify_password(request.password, expert.password_hash):
 
                 # デバッグログを追加
-                print(f"🔍 Expert認証成功: {expert.email}")
-                print(f"🔍 Expert role: {expert.role}")
-                print(f"🔍 Expert role type: {type(expert.role)}")
+                logger.debug(f"Expert認証成功: {expert.email}")
+                logger.debug(f"Expert role: {expert.role}")
+                logger.debug(f"Expert role type: {type(expert.role)}")
 
                 try:
                     # Expertの権限を取得
                     expert_permissions = RBACService.get_expert_permissions(expert)
-                    print(f" Expert permissions: {expert_permissions}")
+                    logger.debug(f"Expert permissions: {expert_permissions}")
                 except Exception as e:
-                    print(f"❌ Expert権限取得エラー: {e}")
+                    logger.error(f"Expert権限取得エラー: {e}")
                     raise HTTPException(
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                         detail=f"Expert権限の取得に失敗しました: {str(e)}"
@@ -221,7 +225,7 @@ def login_user(
                             frame_locals['kwargs']['session_id'] = session_id
                 except Exception as e:
                     # inspectエラーが発生しても認証処理は継続
-                    print(f"⚠️ 継続監視用session_id設定でエラー: {e}")
+                    logger.warning(f"継続監視用session_id設定でエラー: {e}")
                     pass
                 
                 # 成功時の監査ログ
@@ -241,9 +245,9 @@ def login_user(
                             "session_id": session_id
                         }
                     )
-                    print("✅ 監査ログの保存に成功")
+                    logger.debug("監査ログの保存に成功")
                 except Exception as audit_error:
-                    print(f"⚠️ 監査ログの保存に失敗: {audit_error}")
+                    logger.warning(f"監査ログの保存に失敗: {audit_error}")
                     # 監査ログの保存に失敗しても認証処理は継続
                     pass
                 
@@ -260,12 +264,12 @@ def login_user(
             else:
                 # 修正: expertがNoneの場合を考慮
                 if expert:
-                    print(f"❌ Expertパスワード検証失敗: {expert.email}")
+                    logger.warning(f"Expertパスワード検証失敗: {expert.email}")
                 else:
-                    print(f"❌ Expertが見つかりません: {request.email}")
+                    logger.warning(f"Expertが見つかりません: {request.email}")
         
         # どちらでも認証失敗
-        print(f"❌ 認証失敗: {request.email}")
+        logger.warning(f"認証失敗: {request.email}")
         
         # 認証失敗時の監査ログ
         try:
@@ -280,9 +284,9 @@ def login_user(
                     "reason": "invalid_credentials"
                 }
             )
-            print("✅ 認証失敗の監査ログ保存完了")
+            logger.debug("認証失敗の監査ログ保存完了")
         except Exception as audit_error:
-            print(f"⚠️ 認証失敗時の監査ログ保存に失敗: {audit_error}")
+            logger.warning(f"認証失敗時の監査ログ保存に失敗: {audit_error}")
             pass
     
         # どちらでも認証失敗
@@ -296,8 +300,8 @@ def login_user(
         raise
     except Exception as e:
         # 予期しないエラーのみ監査ログに記録
-        print(f"❌ 認証処理で予期しないエラー: {e}")
-        print(f"❌ エラーの型: {type(e)}")
+        logger.error(f"認証処理で予期しないエラー: {e}")
+        logger.error(f"エラーの型: {type(e)}")
         
         # 予期しないエラーの監査ログ（エラーハンドリングを追加）
         try:
@@ -314,7 +318,7 @@ def login_user(
                 }
             )
         except Exception as audit_error:
-            print(f"⚠️ エラー時の監査ログ保存に失敗: {audit_error}")
+            logger.warning(f"エラー時の監査ログ保存に失敗: {audit_error}")
             pass
         
         raise HTTPException(
@@ -348,7 +352,7 @@ async def refresh_token(request: RefreshTokenRequest):
     # セッション管理サービスでトークンを更新
     try:
         session_response = session_manager.refresh_access_token(refresh_token)
-        print(f"🔍 session_response: {session_response}")
+        logger.debug(f"session_response: {session_response}")
         
         if session_response is None:
             raise HTTPException(
@@ -363,7 +367,7 @@ async def refresh_token(request: RefreshTokenRequest):
             }
         
     except Exception as e:
-        print(f"�� セッション更新エラー: {e}")
+        logger.error(f"セッション更新エラー: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="トークンの更新に失敗しました"

@@ -6,6 +6,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, Request, status
 from sqlalchemy.orm import Session
+import logging
 from app.schemas.policy_proposal.policy_proposal import ProposalCreate, ProposalOut, AttachmentOut, PolicySubmissionHistory
 from app.schemas.policy_proposal_comment import PolicyProposalCommentResponse
 from app.crud.policy_proposal.policy_proposal import create_proposal, create_attachment, get_proposal, list_proposals, get_user_submissions
@@ -18,6 +19,9 @@ import os
 from app.core.security.audit import AuditService, AuditEventType
 from app.core.security.audit.decorators import audit_log, audit_log_sync
 from app.models.user import User
+
+# ロガーの設定
+logger = logging.getLogger(__name__)
 
 # 🔒 権限チェック用のインポートを追加
 from app.core.dependencies import require_permissions  # この行を追加
@@ -396,7 +400,7 @@ async def _cleanup_uploaded_blobs(uploaded_blobs: list[tuple[str, str]]):
                 delete_blob,  # 🔒 delete_blob_file → delete_blobに修正
                 blob_name
             )
-            print(f"✅ Blobファイルを削除: {blob_name}")
+            logger.info(f"Blobファイルを削除: {blob_name}")
         except Exception as cleanup_error:
-            print(f"❌ Blobファイル削除でエラー: {cleanup_error}")
+            logger.error(f"Blobファイル削除でエラー: {cleanup_error}")
             # クリーンアップの失敗はログに記録するが、メインエラーは発生させない

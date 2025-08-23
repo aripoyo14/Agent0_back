@@ -5,12 +5,15 @@
 """
 
 from sqlalchemy.orm import Session
+import logging
 from app.models.user import User, UsersDepartments, UsersPositions
 from app.schemas.user import UserCreate
 from uuid import uuid4
 from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException, status
 
+# ロガーの設定
+logger = logging.getLogger(__name__)
 
 # 日本時間（JST）のタイムゾーンを定義
 JST = timezone(timedelta(hours=9))
@@ -69,15 +72,15 @@ def create_user(db: Session, user_in: UserCreate, password_hash: str) -> User:
 # 暗号化されたメールアドレスでユーザーを検索する関数
 def get_user_by_email(db: Session, email: str):
     """暗号化されたメールアドレスでユーザーを検索（最適化版）"""
-    print(f"🔍 get_user_by_email開始: {email}")
+    logger.debug(f"get_user_by_email開始: {email}")
     
     # まず平文のメールアドレスで検索（既存の暗号化されていないデータ）
     user = db.query(User).filter(User.email == email).first()
     if user:
-        print(f"✅ 平文メールアドレスでUser発見: {user.id}")
+        logger.debug(f"平文メールアドレスでUser発見: {user.id}")
         return user
     
-    print(f"⚠️  平文メールアドレスでUser未発見、暗号化データを検索開始")
+    logger.debug(f"平文メールアドレスでUser未発見、暗号化データを検索開始")
     
     # 見つからない場合、暗号化されたデータを検索
     batch_size = 100
@@ -85,64 +88,64 @@ def get_user_by_email(db: Session, email: str):
     
     while True:
         try:
-            print(f"🔍 バッチ処理開始: offset={offset}, batch_size={batch_size}")
+            logger.debug(f"バッチ処理開始: offset={offset}, batch_size={batch_size}")
             users = db.query(User).offset(offset).limit(batch_size).all()
-            print(f"📊 取得されたUser数: {len(users) if users else 0}")
+            logger.debug(f"取得されたUser数: {len(users) if users else 0}")
             
             if not users:
-                print(f"⚠️  ユーザーが見つかりませんでした")
+                logger.debug(f"ユーザーが見つかりませんでした")
                 break
                 
             for i, user in enumerate(users):
                 try:
-                    print(f"🔍 User {i+1} 処理開始: ID={getattr(user, 'id', 'unknown')}")
+                    logger.debug(f"User {i+1} 処理開始: ID={getattr(user, 'id', 'unknown')}")
                     
                     # userオブジェクトの存在確認
                     if user is None:
-                        print(f"❌  UserオブジェクトがNoneです (offset: {offset}, index: {i})")
+                        logger.warning(f"UserオブジェクトがNoneです (offset: {offset}, index: {i})")
                         continue
                         
                     # email属性の存在確認
                     if not hasattr(user, 'email'):
-                        print(f"❌  User {getattr(user, 'id', 'unknown')}: email属性が存在しません")
+                        logger.warning(f"User {getattr(user, 'id', 'unknown')}: email属性が存在しません")
                         continue
                         
                     if user.email is None:
-                        print(f"❌  User {getattr(user, 'id', 'unknown')}: email属性がNoneです")
+                        logger.warning(f"User {getattr(user, 'id', 'unknown')}: email属性がNoneです")
                         continue
                     
-                    print(f" User {getattr(user, 'id', 'unknown')}: email={user.email[:50]}...")
+                    logger.debug(f"User {getattr(user, 'id', 'unknown')}: email={user.email[:50]}...")
                     
                     # メールアドレスが暗号化されているかチェック
                     if user.email.startswith('gAAAAA'):
                         try:
                             decrypted_email = user.get_decrypted_email()
-                            print(f"🔐 復号化成功: {decrypted_email}")
+                            logger.debug(f"復号化成功: {decrypted_email}")
                             if decrypted_email == email:
-                                print(f"✅ 対象User発見: {user.id}")
+                                logger.debug(f"対象User発見: {user.id}")
                                 return user
                         except AttributeError as e:
-                            print(f"❌  User {getattr(user, 'id', 'unknown')}: email属性アクセスエラー - {str(e)}")
+                            logger.warning(f"User {getattr(user, 'id', 'unknown')}: email属性アクセスエラー - {str(e)}")
                             continue
                         except Exception as e:
-                            print(f"❌  User {getattr(user, 'id', 'unknown')}: 復号化エラー - {str(e)}")
+                            logger.warning(f"User {getattr(user, 'id', 'unknown')}: 復号化エラー - {str(e)}")
                             continue
                     else:
-                        print(f"ℹ️  User {getattr(user, 'id', 'unknown')}: 暗号化されていないメールアドレス")
+                        logger.debug(f"User {getattr(user, 'id', 'unknown')}: 暗号化されていないメールアドレス")
                             
                 except Exception as e:
-                    print(f"❌  User処理エラー (ID: {getattr(user, 'id', 'unknown')}): {str(e)}")
-                    print(f"   エラーの型: {type(e)}")
+                    logger.error(f"User処理エラー (ID: {getattr(user, 'id', 'unknown')}): {str(e)}")
+                    logger.error(f"エラーの型: {type(e)}")
                     continue
             
             offset += batch_size
             
         except Exception as e:
-            print(f"❌  バッチ処理エラー (offset: {offset}): {str(e)}")
-            print(f"   エラーの型: {type(e)}")
+            logger.error(f"バッチ処理エラー (offset: {offset}): {str(e)}")
+            logger.error(f"エラーの型: {type(e)}")
             break
     
-    print(f"❌  Userが見つかりませんでした")
+    logger.warning(f"Userが見つかりませんでした")
     return None
 
 # 暗号化されたデータでの検索ヘルパー関数

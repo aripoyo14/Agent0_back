@@ -5,6 +5,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
+import logging
 from app.schemas.user import UserCreate, UserOut, UserRegisterResponse, RoleUpdateRequest
 from app.core.security import verify_password, hash_password
 from app.core.security.jwt import decode_access_token 
@@ -24,6 +25,8 @@ from typing import List
 from app.core.security.rbac.decorators import require_user_permissions
 from app.core.security.rbac.permissions import Permission
 
+# ロガーの設定
+logger = logging.getLogger(__name__)
 
 # FastAPIのルーターを初期化
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -140,12 +143,12 @@ def get_user_profile(token: str = Depends(HTTPBearer()), db: Session = Depends(g
         token_type = payload.get("user_type")
 
         # デバッグログを追加
-        print(f"=== デバッグ情報 ===")
-        print(f"Token payload: {payload}")
-        print(f"user_id: {user_id}")
-        print(f"role: {role}")
-        print(f"token_type: {token_type}")
-        print(f"==================")
+        logger.debug(f"=== デバッグ情報 ===")
+        logger.debug(f"Token payload: {payload}")
+        logger.debug(f"user_id: {user_id}")
+        logger.debug(f"role: {role}")
+        logger.debug(f"token_type: {token_type}")
+        logger.debug(f"==================")
         
         if not user_id or not role or not token_type:
             raise HTTPException(
@@ -163,7 +166,7 @@ def get_user_profile(token: str = Depends(HTTPBearer()), db: Session = Depends(g
         return user
         
     except Exception as e:
-        print(f"エラー詳細: {e}")
+        logger.error(f"エラー詳細: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="認証に失敗しました。"
