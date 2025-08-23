@@ -23,26 +23,8 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     try:
         logger.debug("パスワード検証開始")
-        logger.debug(f"平文パスワード: {plain_password[:3]}***")
-        logger.debug(f"ハッシュパスワード: {hashed_password[:20]}...")
         
-        # 暗号化されたパスワードの場合は復号化を試行
-        if hashed_password.startswith('gAAAAA'):  # Fernet暗号化の特徴
-            logger.debug("Fernet暗号化されたパスワードを検出")
-            try:
-                decrypted_password = encryption_service.decrypt(hashed_password)
-                logger.debug(f"復号化されたパスワード: {decrypted_password[:3]}***")
-                
-                # 復号化されたパスワードと平文パスワードを比較
-                result = plain_password == decrypted_password
-                logger.debug(f"復号化パスワード比較結果: {result}")
-                return result
-            except Exception as e:
-                logger.warning(f"復号化に失敗: {e}")
-                return False
-        
-        # bcryptハッシュの場合は通常の検証
-        logger.debug("bcryptハッシュパスワードとして検証")
+        # bcryptハッシュでの検証
         result = pwd_context.verify(plain_password, hashed_password)
         logger.debug(f"bcrypt検証結果: {result}")
         return result
