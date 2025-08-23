@@ -5,6 +5,8 @@ from sqlalchemy.dialects.mysql import CHAR
 from app.db.base_class import Base
 from datetime import datetime, timezone, timedelta
 import uuid
+import enum
+
 
 # 日本標準時（JST）
 JST = timezone(timedelta(hours=9))
@@ -18,6 +20,11 @@ policy_proposals_policy_tags = Table(
     Column('created_at', DateTime, default=lambda: datetime.now(JST))
 )
 
+class PolicyStatus(str, enum.Enum):
+    draft = "draft"
+    published = "published"
+    archived = "archived"
+
 class PolicyProposal(Base):
     """
     - 政策案を格納するテーブルのモデル定義。
@@ -26,29 +33,26 @@ class PolicyProposal(Base):
 
     __tablename__ = "policy_proposals"
 
-    # 主キー：UUID
+    # 主キー：UUID（MySQLではCHAR(36)）
     id = Column(CHAR(36), primary_key=True, default=lambda: str(uuid.uuid4()))
 
-    # タイトル（255文字制限）
+    # タイトル
     title = Column(String(255), nullable=False)
 
-    # 本文（TEXT型）
+    # 本文
     body = Column(Text, nullable=False)
 
     # 投稿者（user.idへの外部キー）
     published_by_user_id = Column(CHAR(36), ForeignKey("users.id"), nullable=False)
+    published_by_user = relationship("User")
 
-    # 投稿ステータス（draft / published / archived）
-    status = Column(
-        Enum("draft", "published", "archived"),
-        nullable=False,
-        default="draft"
-    )
+    # 投稿ステータス
+    status = Column(Enum(PolicyStatus), nullable=False, default=PolicyStatus.draft)
 
-    # 公開日時（NULL可）
+    # 公開日時
     published_at = Column(DateTime, nullable=True)
 
-    # 作成・更新日時（JST）
+    # 作成・更新日時（DBの時刻で統一）
     created_at = Column(DateTime, default=lambda: datetime.now(JST))
     updated_at = Column(DateTime, default=lambda: datetime.now(JST), onupdate=lambda: datetime.now(JST))
 
