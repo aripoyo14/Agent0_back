@@ -61,7 +61,7 @@ class RateLimitConfig(BaseModel):
 
 # デフォルト設定インスタンス
 default_config = RateLimitConfig(
-    enabled=False,  # True → False に変更
+    enabled=True,  # False → True に変更
     auth_login_max_requests=3,
     auth_login_window_seconds=60,
     user_register_max_requests=3,
@@ -70,8 +70,8 @@ default_config = RateLimitConfig(
     file_upload_window_seconds=60,
     comment_post_max_requests=20,
     comment_post_window_seconds=60,
-    read_api_max_requests=20,  # 2 → 20回に変更
-    read_api_window_seconds=300,  # 120 → 300秒（5分）に変更
+    read_api_max_requests=20,
+    read_api_window_seconds=300,
     global_ip_max_requests=1000,
     global_ip_window_seconds=3600,
     log_violations=True,
