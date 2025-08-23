@@ -1,6 +1,10 @@
 import os
+import logging
 from openai import OpenAI
 from app.core.config import settings
+
+# ロガーの設定
+logger = logging.getLogger(__name__)
 
 _client: OpenAI = None
 
@@ -20,4 +24,4 @@ async def init_external_services():
         raise RuntimeError("OPENAI_API_KEY is missing")
     _client = OpenAI(api_key=settings.openai_api_key)
     
-    print("✅ OpenAI client initialized successfully")
+    logger.info("✅ OpenAI client initialized successfully")

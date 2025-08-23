@@ -3,7 +3,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from dotenv import load_dotenv
 import os
+import logging
 from pathlib import Path
+
+# ロガーの設定
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -77,7 +81,7 @@ class Settings(BaseSettings):
         """SSL証明書の絶対パスを取得する。ファイルが存在しない場合はNoneを返す"""
         # SSL証明書パスが空の場合はNoneを返す
         if not self.ssl_ca_path:
-            print("ℹ️  SSL証明書パスが設定されていません")
+            logger.info("SSL証明書パスが設定されていません")
             return None
             
         ssl_path = Path(self.ssl_ca_path)
@@ -89,11 +93,11 @@ class Settings(BaseSettings):
         
         # ファイルが存在するかチェック
         if ssl_path.exists():
-            print(f"✅ SSL証明書ファイルが見つかりました: {ssl_path}")
+            logger.info(f"SSL証明書ファイルが見つかりました: {ssl_path}")
             return str(ssl_path.resolve())
         else:
-            print(f"⚠️  SSL証明書ファイルが見つかりません: {ssl_path}")
-            print(f"   期待される場所: {ssl_path.absolute()}")
+            logger.warning(f"SSL証明書ファイルが見つかりません: {ssl_path}")
+            logger.warning(f"期待される場所: {ssl_path.absolute()}")
             return None
 
     def get_continuous_verification_config(self) -> dict:
@@ -130,7 +134,7 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-print("✅ Loaded settings:", settings.dict())
+logger.info("Loaded settings: %s", settings.dict())
 
 @lru_cache
 def get_settings() -> Settings:

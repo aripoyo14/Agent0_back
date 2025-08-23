@@ -7,8 +7,11 @@ from typing import Optional, Dict, Set
 from jose import JWTError, jwt
 from app.core.config import settings
 import uuid
-
+import logging
 from .models import SessionData, SessionCreate, TokenResponse
+
+# ロガーの設定
+logger = logging.getLogger(__name__)
 
 class SessionManager:
     """セッション管理クラス"""
@@ -46,7 +49,7 @@ class SessionManager:
             return True
             
         except Exception as e:
-            print(f"セッション作成エラー: {e}")
+            logger.error(f"セッション作成エラー: {e}")
             return False
     
     def _create_access_token(self, user_id: str, user_type: str, permissions: list, session_id: str) -> str:

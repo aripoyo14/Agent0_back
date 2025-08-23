@@ -7,7 +7,11 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import base64
 import os
+import logging
 from typing import Optional
+
+# ロガーの設定
+logger = logging.getLogger(__name__)
 
 class EncryptionService:
     def __init__(self):
@@ -27,9 +31,9 @@ class EncryptionService:
                     # 想定外の形式の場合はエラーにして新規生成にフォールバック
                     raise ValueError("Invalid ENCRYPTION_KEY format")
             except Exception as e:
-                print(f"⚠️  ENCRYPTION_KEY の形式が不正です: {str(e)}")
+                logger.warning(f"ENCRYPTION_KEY の形式が不正です: {str(e)}")
                 key = Fernet.generate_key()
-                print(f"⚠️  新しい暗号化キーを生成しました: {key.decode()}")
+                logger.warning(f"新しい暗号化キーを生成しました: {key.decode()}")
                 return key
         
         # 環境変数がない場合、設定ファイルから取得
@@ -41,11 +45,11 @@ class EncryptionService:
                     return config_key.encode()
                 return base64.urlsafe_b64decode(config_key)
         except Exception as e:
-            print(f"⚠️  設定ファイルからの暗号化キー取得に失敗: {e}")
+            logger.warning(f"設定ファイルからの暗号化キー取得に失敗: {e}")
         
         # 新しいキーを生成して環境変数に設定
         key = Fernet.generate_key()
-        print(f"⚠️  新しい暗号化キーを生成しました。環境変数ENCRYPTION_KEYに設定してください: {key.decode()}")
+        logger.warning(f"新しい暗号化キーを生成しました。環境変数ENCRYPTION_KEYに設定してください: {key.decode()}")
         return key
     
     def encrypt_data(self, data: str) -> str:

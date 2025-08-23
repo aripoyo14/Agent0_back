@@ -4,6 +4,7 @@
 """
 
 import time
+import logging
 from typing import Dict, Optional, List
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
@@ -12,14 +13,17 @@ from fastapi import Request
 from .models import RateLimitRule, RateLimitViolation, RateLimitStatus, RateLimitStats, RateLimitType
 from .config import RateLimitConfig
 
+# ロガーの設定
+logger = logging.getLogger(__name__)
+
 class RateLimitService:
     """レート制限のビジネスロジックを提供するサービス層"""
     
     def __init__(self, config: Optional[RateLimitConfig] = None):
         self.config = config or RateLimitConfig()
         
-        print(f"🔧 レート制限サービス初期化: {self.config}")  # デバッグログ
-        print(f"🔧 認証ログイン設定: {self.config.auth_login_max_requests}/{self.config.auth_login_window_seconds}")  # デバッグログ
+        logger.debug(f"レート制限サービス初期化: {self.config}")  # デバッグログ
+        logger.debug(f"認証ログイン設定: {self.config.auth_login_max_requests}/{self.config.auth_login_window_seconds}")  # デバッグログ
         
         # リクエスト履歴の管理
         self.ip_requests: Dict[str, deque] = defaultdict(lambda: deque())
@@ -93,15 +97,15 @@ class RateLimitService:
     ) -> tuple[bool, Optional[RateLimitViolation]]:
         """レート制限をチェック"""
         
-        print(f" レート制限チェック開始: {rule.name}")  # デバッグログ
+        logger.debug(f"レート制限チェック開始: {rule.name}")  # デバッグログ
         
         if not self.config.enabled or not rule.enabled:
-            print(f"⚠️  レート制限が無効: enabled={self.config.enabled}, rule.enabled={rule.enabled}")  # デバッグログ
+            logger.debug(f"レート制限が無効: enabled={self.config.enabled}, rule.enabled={rule.enabled}")  # デバッグログ
             return True, None
         
         # 識別子を決定
         identifier = custom_identifier or self._get_identifier(request, rule.request_type)
-        print(f" 識別子: {identifier}, タイプ: {rule.request_type}")  # デバッグログ
+        logger.debug(f"識別子: {identifier}, タイプ: {rule.request_type}")  # デバッグログ
         
         # 適切なリクエスト履歴を選択
         requests_deque = self._get_requests_deque(rule.request_type, identifier)
@@ -113,12 +117,12 @@ class RateLimitService:
         current_count = len(requests_deque)
         is_allowed = current_count < rule.max_requests
         
-        print(f"📊 現在のカウント: {current_count}/{rule.max_requests}, 許可: {is_allowed}")  # デバッグログ
+        logger.debug(f"現在のカウント: {current_count}/{rule.max_requests}, 許可: {is_allowed}")  # デバッグログ
         
         if is_allowed:
             # リクエストを記録
             requests_deque.append(time.time())
-            print(f"✅ リクエスト記録: {len(requests_deque)}")  # デバッグログ
+            logger.debug(f"リクエスト記録: {len(requests_deque)}")  # デバッグログ
         else:
             # 違反を記録
             violation = RateLimitViolation(
@@ -135,7 +139,7 @@ class RateLimitService:
                 user_id=self._get_user_id_from_token(request)
             )
             self.violations.append(violation)
-            print(f"🚫 レート制限違反記録: {violation}")  # デバッグログ
+            logger.debug(f"レート制限違反記録: {violation}")  # デバッグログ
         
         return is_allowed, None if is_allowed else violation
     

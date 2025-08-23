@@ -8,6 +8,9 @@ from sqlalchemy.orm import Session
 from fastapi import Request
 from app.core.security.audit.models import AuditLog, AuditEventType
 from app.core.security.audit.config import AuditConfig
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class AuditService:
@@ -81,38 +84,38 @@ class AuditService:
     def _get_client_ip(self, request: Request) -> str:
         """クライアントのIPアドレスを取得"""
         try:
-            print(f"🔍 IPアドレス取得処理開始")
-            print(f"   リクエストヘッダー: {dict(request.headers)}")
+            logger.debug(f"IPアドレス取得処理開始")
+            logger.debug(f"  リクエストヘッダー: {dict(request.headers)}")
             
             # カスタムヘッダーから取得（テスト用）
             custom_ip = request.headers.get("x-client-ip")
             if custom_ip:
-                print(f"   X-Client-IPから取得: {custom_ip}")
+                logger.debug(f"  X-Client-IPから取得: {custom_ip}")
                 return custom_ip
             
             # プロキシ経由の場合の対応
             forwarded_for = request.headers.get("x-forwarded-for")
             if forwarded_for:
                 ip = forwarded_for.split(",")[0].strip()
-                print(f"   X-Forwarded-Forから取得: {ip}")
+                logger.debug(f"  X-Forwarded-Forから取得: {ip}")
                 return ip
             
             real_ip = request.headers.get("x-real-ip")
             if real_ip:
-                print(f"   X-Real-IPから取得: {real_ip}")
+                logger.debug(f"  X-Real-IPから取得: {real_ip}")
                 return real_ip
             
             # クライアントの直接IP
             if request.client and request.client.host:
                 ip = request.client.host
-                print(f"   クライアントホストから取得: {ip}")
+                logger.debug(f"  クライアントホストから取得: {ip}")
                 return ip
             
-            print(f"   IPアドレスが取得できませんでした")
+            logger.debug(f"  IPアドレスが取得できませんでした")
             return "unknown"
             
         except Exception as e:
-            print(f"❌ IPアドレス取得エラー: {e}")
+            logger.error(f"IPアドレス取得エラー: {e}")
             return "unknown"
     
     def _mask_sensitive_data(self, data: Dict[str, Any]) -> Dict[str, Any]:

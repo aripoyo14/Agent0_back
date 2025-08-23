@@ -1,5 +1,9 @@
 from azure.storage.blob import BlobServiceClient
+import logging
 from app.core.config import get_settings
+
+# ロガーの設定
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 AZURE_CONNECTION_STRING = settings.azure_storage_connection_string
@@ -65,7 +69,7 @@ def delete_blob(blob_name: str) -> bool:
         container_name = os.getenv("AZURE_STORAGE_CONTAINER_NAME", "default")
         
         if not connection_string:
-            print(f"⚠️ AZURE_STORAGE_CONNECTION_STRINGが設定されていません")
+            logger.warning("AZURE_STORAGE_CONNECTION_STRINGが設定されていません")
             return False
         
         blob_service_client = BlobServiceClient.from_connection_string(connection_string)
@@ -75,9 +79,9 @@ def delete_blob(blob_name: str) -> bool:
         # Blobを削除
         blob_client.delete_blob()
         
-        print(f"✅ Blobファイル削除成功: {blob_name}")
+        logger.info(f"Blobファイル削除成功: {blob_name}")
         return True
         
     except Exception as e:
-        print(f"❌ Blobファイル削除失敗: {blob_name}, エラー: {e}")
+        logger.error(f"Blobファイル削除失敗: {blob_name}, エラー: {e}")
         return False
