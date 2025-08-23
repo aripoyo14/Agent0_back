@@ -100,3 +100,25 @@ class PolicyProposalCommentListResponse(BaseModel):
 class PolicyProposalCommentsCountResponse(BaseModel):
     policy_proposal_id: str
     comment_count: int
+
+# 返信コメント取得用レスポンススキーマ
+class ReplyCommentResponse(BaseModel):
+    id: UUID
+    comment_text: str
+    author_type: Literal["admin", "staff", "contributor", "viewer"]
+    author_id: UUID
+    author_name: Optional[str] = None
+    posted_at: datetime
+    parent_comment_id: UUID
+
+    model_config = {
+        "from_attributes": True
+    }
+
+class RepliesResponse(BaseModel):
+    replies: List[ReplyCommentResponse]
+    total_count: int
+    has_more: bool
+
+class ReplyCountResponse(BaseModel):
+    reply_count: int

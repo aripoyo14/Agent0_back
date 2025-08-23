@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.models.policy_proposal.policy_proposal_comment import PolicyProposalComment
 from app.models.policy_proposal.policy_proposal import PolicyProposal
+from app.models.user.user import User
+from app.models.expert import Expert
 from app.schemas.policy_proposal_comment import (
     PolicyProposalCommentCreate,
     PolicyWithComments
@@ -387,3 +389,85 @@ def get_comment_count_by_policy_proposal(db: Session, policy_proposal_id: str) -
     ) or 0
     
     return comment_count
+
+def get_replies_by_parent_comment_id(
+    db: Session, 
+    parent_comment_id: str, 
+    limit: int = 20, 
+    offset: int = 0
+) -> List[PolicyProposalComment]:
+    """
+    指定された親コメントに対する返信コメント一覧を取得する。
+    
+    Args:
+        db: Database session
+        parent_comment_id: 親コメントID
+        limit: 取得件数制限（デフォルト: 20）
+        offset: オフセット（デフォルト: 0）
+        
+    Returns:
+        List[PolicyProposalComment]: 返信コメント一覧
+    """
+    # 親コメントの存在確認
+    parent_comment = get_comment_by_id(db, parent_comment_id)
+    if not parent_comment:
+        raise HTTPException(status_code=404, detail="Parent comment not found")
+    
+    # 返信コメントを取得（投稿日時の昇順でソート）
+    replies = (
+        db.query(PolicyProposalComment)
+        .filter(
+            PolicyProposalComment.parent_comment_id == parent_comment_id,
+            PolicyProposalComment.is_deleted == False
+        )
+        .order_by(PolicyProposalComment.posted_at.asc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    
+    # 投稿者名を設定（効率的な方法）
+    for reply in replies:
+        if reply.author_type == "user":
+            # ユーザーの場合
+            user = db.query(User).filter(User.id == reply.author_id).first()
+            if user:
+                reply.author_name = f"{user.last_name} {user.first_name}"
+        elif reply.author_type == "expert":
+            # 有識者の場合
+            expert = db.query(Expert).filter(Expert.id == reply.author_id).first()
+            if expert:
+                reply.author_name = f"{expert.last_name} {expert.first_name}"
+        else:
+            # その他の場合
+            reply.author_name = f"{reply.author_type} user"
+    
+    return replies
+
+def get_reply_count_by_parent_comment_id(db: Session, parent_comment_id: str) -> int:
+    """
+    指定された親コメントに対する返信コメント数を取得する。
+    
+    Args:
+        db: Database session
+        parent_comment_id: 親コメントID
+        
+    Returns:
+        int: 返信コメント数
+    """
+    # 親コメントの存在確認
+    parent_comment = get_comment_by_id(db, parent_comment_id)
+    if not parent_comment:
+        raise HTTPException(status_code=404, detail="Parent comment not found")
+    
+    # 返信コメント数を取得
+    reply_count = (
+        db.query(func.count(PolicyProposalComment.id))
+        .filter(
+            PolicyProposalComment.parent_comment_id == parent_comment_id,
+            PolicyProposalComment.is_deleted == False
+        )
+        .scalar()
+    ) or 0
+    
+    return reply_count
