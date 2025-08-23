@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = Field(default=30, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
     
     # 暗号化
-    encryption_key: str = Field(default="Q1VxcEVvTlRfN3FJSU13ZGNUckxwTUFtTVVVVk11Ni04M2tmQ2o0WGQ1bz0", alias="ENCRYPTION_KEY")
+    encryption_key: str = Field(default="", alias="ENCRYPTION_KEY")
 
     # 外部API
     openai_api_key: str = Field(default="your-openai-api-key-here", alias="OPENAI_API_KEY")
