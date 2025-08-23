@@ -47,149 +47,24 @@ def get_db():
 
 # 新規政策案の登録用エンドポイント
 @router.post("/", response_model=ProposalOut)
-@audit_log(
-    event_type=AuditEventType.DATA_CREATE,
-    resource="policy_proposal",
-    action="create"
-)
-# @require_user_permissions(Permission.POLICY_CREATE)  # 🔒 この行をコメントアウト
-async def post_policy_proposal_with_attachments(
-    http_request: Request,
-    title: str = Form(...),
-    body: str = Form(...),
-    proposal_status: str = Form("draft"),  # 🔒 status → proposal_statusにリネーム
-    files: list[UploadFile] | None = File(None),
+def create_policy_proposal(
+    data: ProposalCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permissions(Permission.POLICY_CREATE)),  #  依存関係で権限チェック
+    current_user: User = Depends(require_permissions(Permission.POLICY_CREATE)),
 ):
-
     """
-    新規政策案の登録用エンドポイント
-    - title: 政策案のタイトル
-    - body: 政策案の本文
-    - proposal_status: 政策案のステータス
-    - files: 添付ファイル
-    
-    権限: POLICY_CREATE が必要
+    政策案を新規作成
     """
-
-    # 1) 政策案を作成
-    try:
-        published_by_user_id = UUID(str(current_user.id))
-    except ValueError as e:
-        # logger.error(f"無効なユーザーID形式: {current_user.id}, エラー: {e}") # loggerが定義されていないためコメントアウト
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="無効なユーザーID形式です"
-        )
-    
     payload = ProposalCreate(
-        title=title,
-        body=body,
-        published_by_user_id=published_by_user_id,  # 🔒 文字列をUUIDに変換
-        status=proposal_status,  #  変数名を修正
+        title=data.title,
+        body=data.body,
+        status=data.status,
+        published_by_user_id=UUID(str(current_user.id))
     )
-    
-    # 2) attachments_outを関数冒頭で初期化
-    attachments_out: list[AttachmentOut] = []
-    uploaded_blobs = []  # クリーンアップ用（Blob名とURL）
-    
-    try:
-        # まとめてやるなら begin ブロック
-        with db.begin():
-            # 1) 政策案を作成
-            proposal = create_proposal(db=db, data=payload)
-            
-            # 2) 添付（任意・複数）
-            if files:
-                for f in files:
-                    try:
-                        extension = os.path.splitext(f.filename)[1]
-                        blob_name = f"policy_attachments/{proposal.id}/{uuid4()}{extension}"
-                        
-                        # 🔄 非同期ファイル読み取り
-                        file_bytes = await f.read()
-                        
-                        # 🔄 anyio.to_thread.run_syncで安全なスレッド実行
-                        file_url = await anyio.to_thread.run_sync(
-                            upload_binary_to_blob, 
-                            file_bytes, 
-                            blob_name
-                        )
-                        
-                        # クリーンアップ用に記録
-                        uploaded_blobs.append((blob_name, file_url))
-                        
-                        att = create_attachment(
-                            db,
-                            policy_proposal_id=str(proposal.id),
-                            file_name=f.filename,
-                            file_url=file_url,
-                            file_type=f.content_type,
-                            file_size=len(file_bytes) if file_bytes is not None else None,
-                            uploaded_by_user_id=str(current_user.id),
-                        )
-                        attachments_out.append(att)
-                        
-                    except Exception as file_error:
-                        # 個別ファイルのエラーをログに記録
-                        # logger.error(f"ファイル {f.filename} の処理でエラー: {file_error}") # loggerが定義されていないためコメントアウト
-                        
-                        # 3) アップロードされたBlobファイルをクリーンアップ
-                        if uploaded_blobs:
-                            await _cleanup_uploaded_blobs(uploaded_blobs)
-                        
-                        raise HTTPException(
-                            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail=f"ファイルアップロード中にエラーが発生しました: {file_error}"
-                        )
-            
-            # 3) 返却用に proposal へアタッチメントを載せる
-            proposal.attachments = attachments_out  # type: ignore[attr-defined]
-            
-        # ここで commit 済み
-        return proposal
-        
-    except Exception as e:
-        # 必要なら Blob の削除処理を呼ぶ
-        if uploaded_blobs:
-            await _cleanup_uploaded_blobs(uploaded_blobs)
-        
-        # logger.error(f"政策案作成でエラー: {e}") # loggerが定義されていないためコメントアウト
-        raise HTTPException(
-            status_code=500, 
-            detail="政策案の作成に失敗しました"
-        ) from e
 
-
-
-# 添付ファイルのアップロード（1件）
-# @router.post("/{proposal_id}/attachments", response_model=AttachmentOut)
-# def upload_attachment(
-#     proposal_id: str,
-#     file: UploadFile = File(...),
-#     uploaded_by_user_id: str | None = None,
-#     db: Session = Depends(get_db),
-# ):
-#     # Blob名はUUIDに拡張子を付けるなどして衝突回避
-#     extension = os.path.splitext(file.filename)[1]
-#     blob_name = f"policy_attachments/{proposal_id}/{uuid4()}{extension}"
-
-#     # Azure Blobへアップロード
-#     file_bytes = file.file.read()
-#     file_url = upload_binary_to_blob(file_bytes, blob_name)
-
-#     # DBへメタ情報を保存
-#     attachment = create_attachment(
-#         db,
-#         policy_proposal_id=proposal_id,
-#         file_name=file.filename,
-#         file_url=file_url,
-#         file_type=file.content_type,
-#         file_size=len(file_bytes),
-#         uploaded_by_user_id=uploaded_by_user_id,
-#     )
-#     return attachment
+    proposal = create_proposal(db, payload)
+    db.commit()
+    return proposal
 
 
 
