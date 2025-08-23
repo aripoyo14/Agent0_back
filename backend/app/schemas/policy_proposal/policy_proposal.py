@@ -81,8 +81,8 @@ class PolicySubmissionHistory(BaseModel):
 class ProposalCreate(BaseModel):
     title: str = Field(max_length=255)
     body: str
-    published_by_user_id: UUID
     status: PolicyStatus = "draft"
+    published_by_user_id: UUID | None = None  # strではなくUUID型に変更
 
 # 添付作成用スキーマ
 class AttachmentCreate(BaseModel):

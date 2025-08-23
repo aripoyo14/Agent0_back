@@ -61,7 +61,7 @@ class RateLimitConfig(BaseModel):
 
 # デフォルト設定インスタンス
 default_config = RateLimitConfig(
-    enabled=True,
+    enabled=False,  # True → False に変更
     auth_login_max_requests=3,
     auth_login_window_seconds=60,
     user_register_max_requests=3,
