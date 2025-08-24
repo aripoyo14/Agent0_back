@@ -14,6 +14,7 @@ from app.models.policy_proposal.policy_proposal import PolicyProposal
 from app.models.policy_proposal.policy_proposal_comment import PolicyProposalComment
 from app.schemas.policy_proposal.policy_proposal import ProposalCreate
 from app.models.policy_proposal.policy_proposal_attachments import PolicyProposalAttachment
+from app.models.policy_tag import PolicyTag
 
 # 日本時間（JST）のタイムゾーンを定義
 JST = timezone(timedelta(hours=9))
@@ -45,7 +46,14 @@ def create_proposal(db: Session, data: ProposalCreate) -> PolicyProposal:
     db.commit()
     db.refresh(proposal)
 
-    # 4. 登録した政策案オブジェクトを返す
+    # 4. 政策タグの関連付け（新規追加）
+    if data.policy_tag_ids:
+        policy_tags = db.query(PolicyTag).filter(PolicyTag.id.in_(data.policy_tag_ids)).all()
+        proposal.policy_tags = policy_tags
+        db.commit()
+        db.refresh(proposal)
+
+    # 5. 登録した政策案オブジェクトを返す
     return proposal
 
 

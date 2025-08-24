@@ -59,12 +59,111 @@ def create_policy_proposal(
         title=data.title,
         body=data.body,
         status=data.status,
-        published_by_user_id=UUID(str(current_user.id))
+        published_by_user_id=UUID(str(current_user.id)),
+        policy_tag_ids=data.policy_tag_ids  # 新規追加
     )
 
     proposal = create_proposal(db, payload)
     db.commit()
     return proposal
+
+
+# 添付ファイル付き政策案作成エンドポイント
+@router.post("/with-attachments", response_model=ProposalOut)
+async def create_policy_proposal_with_attachments(
+    title: str = Form(...),
+    body: str = Form(...),
+    status: str = Form("published"),  # draftからpublishedに変更
+    policy_tag_ids: str = Form(None),  # JSON文字列として受け取り
+    files: list[UploadFile] = File(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions(Permission.POLICY_CREATE)),
+):
+    """
+    添付ファイル付きで政策案を新規作成
+    
+    ## 機能
+    - 政策提案の基本情報（タイトル、本文、ステータス）
+    - 政策テーマ（タグ）の選択
+    - 複数ファイルのアップロード
+    - Blobストレージへのファイル保存
+    - データベースへの添付ファイル情報保存
+    
+    ## リクエスト形式
+    Content-Type: multipart/form-data
+    
+    - title: 政策提案タイトル
+    - body: 政策提案の詳細内容
+    - status: draft/published/archived
+    - policy_tag_ids: [1,3,5] (JSON文字列)
+    - files: 複数のファイル
+    """
+    try:
+        # policy_tag_idsのパース
+        tag_ids = None
+        if policy_tag_ids:
+            import json
+            tag_ids = json.loads(policy_tag_ids)
+        
+        # 政策提案の作成
+        payload = ProposalCreate(
+            title=title,
+            body=body,
+            status=status,
+            published_by_user_id=UUID(str(current_user.id)),
+            policy_tag_ids=tag_ids
+        )
+        
+        proposal = create_proposal(db, payload)
+        
+        # 添付ファイルの処理
+        uploaded_attachments = []
+        if files:
+            for file in files:
+                # ファイルサイズチェック（5MB制限）
+                if file.size > 5 * 1024 * 1024:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"ファイルサイズが5MBを超えています: {file.filename}"
+                    )
+                
+                # ファイル形式チェック
+                allowed_types = ['application/pdf', 'application/msword', 
+                               'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain']
+                if file.content_type not in allowed_types:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"対応していないファイル形式です: {file.filename}"
+                    )
+                
+                # ファイルをBlobストレージにアップロード
+                blob_name = f"policy_proposals/{proposal.id}/{file.filename}"
+                file_content = await file.read()
+                file_url = upload_binary_to_blob(file_content, blob_name)
+                
+                # 添付ファイル情報をDBに保存
+                attachment = create_attachment(
+                    db=db,
+                    policy_proposal_id=str(proposal.id),
+                    file_name=file.filename,
+                    file_url=file_url,
+                    file_type=file.content_type,
+                    file_size=file.size,
+                    uploaded_by_user_id=str(current_user.id)
+                )
+                uploaded_attachments.append(attachment)
+        
+        db.commit()
+        return proposal
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"政策提案作成エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="政策提案の作成に失敗しました"
+        )
 
 
 
