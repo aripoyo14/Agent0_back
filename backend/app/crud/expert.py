@@ -114,9 +114,9 @@ def get_expert_insights(db: Session, expert_id: str):
             MeetingUser.user_id,
             User.last_name,
             User.first_name,
-            # Meeting に evaluation/stance が存在しない場合を考慮し NULL とする
-            cast(None, Integer).label("evaluation"),
-            cast(None, Integer).label("stance"),
+            # Meetingの評価・スタンスをそのまま取得（NULL許容）
+            Meeting.evaluation.label("evaluation"),
+            Meeting.stance.label("stance"),
         )
         .join(meeting_ids_subq, meeting_ids_subq.c.meeting_id == Meeting.id)
         .join(MeetingUser, MeetingUser.meeting_id == Meeting.id)
