@@ -188,14 +188,17 @@ class Settings(BaseSettings):
     def get_cors_origins(self) -> list[str]:
         """環境に応じたCORSオリジンを取得"""
         if self.is_production:
-            # 本番環境でも環境変数を優先
+            # デバッグ用：環境変数の値をログ出力
+            logger.info(f"本番環境 - cors_allow_origins_str: {self.cors_allow_origins_str}")
+            logger.info(f"本番環境 - cors_allow_origins: {self.cors_allow_origins}")
+            
             if self.cors_allow_origins_str and "localhost" not in self.cors_allow_origins_str:
+                logger.info(f"環境変数を使用: {self.cors_allow_origins}")
                 return self.cors_allow_origins
             else:
-                # 環境変数が設定されていない場合のフォールバック
-                return [
-                    "https://aps-agent0-02-afawambwf2bxd2fv.italynorth-01.azurewebsites.net",
-                ]
+                logger.warning("本番環境でCORS_ALLOW_ORIGINSが設定されていません")
+                # 一時的にフロントエンドのURLを許可
+                return ["https://aps-agent0-02-afawambwf2bxd2fv.italynorth-01.azurewebsites.net"]
         elif self.is_staging:
             # ステージング環境
             return [
