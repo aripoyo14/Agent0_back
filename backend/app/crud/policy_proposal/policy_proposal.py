@@ -193,3 +193,93 @@ def get_user_submissions(
         }
         results.append(result)
     return results
+
+# ... existing code ...
+
+def get_proposals_by_policy_tag(
+    db: Session,
+    policy_tag_id: int,
+    *,
+    status_filter: Optional[str] = None,  # "draft" | "published" | "archived"
+    offset: int = 0,
+    limit: int = 20,
+) -> List[PolicyProposal]:
+    """
+    指定された政策テーマタグに紐づく政策案を取得する関数。
+    - 政策タグIDでのフィルタ
+    - status でのフィルタ（オプション）
+    - 新しい順（created_at DESC）
+    - 政策タグ情報も含めて取得する
+    """
+    qs = (
+        db.query(PolicyProposal)
+        .join(PolicyProposal.policy_tags)
+        .filter(PolicyProposal.policy_tags.any(id=policy_tag_id))
+    )
+
+    if status_filter:
+        qs = qs.filter(PolicyProposal.status == status_filter)
+
+    rows = (
+        qs.options(
+            joinedload(PolicyProposal.attachments),
+            joinedload(PolicyProposal.policy_tags)
+        )
+        .order_by(PolicyProposal.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    return rows
+
+
+def get_proposals_by_policy_tags(
+    db: Session,
+    policy_tag_ids: List[int],
+    *,
+    status_filter: Optional[str] = None,  # "draft" | "published" | "archived"
+    offset: int = 0,
+    limit: int = 20,
+) -> List[PolicyProposal]:
+    """
+    指定された複数の政策テーマタグに紐づく政策案を取得する関数。
+    - 複数の政策タグIDでのフィルタ（OR条件）
+    - status でのフィルタ（オプション）
+    - 新しい順（created_at DESC）
+    - 政策タグ情報も含めて取得する
+    """
+    print(f" get_proposals_by_policy_tags 呼び出し:")
+    print(f"   タグID: {policy_tag_ids}")
+    print(f"   ステータスフィルタ: {status_filter}")
+    print(f"   オフセット: {offset}")
+    print(f"   リミット: {limit}")
+    
+    qs = (
+        db.query(PolicyProposal)
+        .join(PolicyProposal.policy_tags)
+        .filter(PolicyProposal.policy_tags.any(PolicyTag.id.in_(policy_tag_ids)))
+    )
+
+    if status_filter:
+        qs = qs.filter(PolicyProposal.status == status_filter)
+        print(f"   ステータスフィルタ適用後: {qs}")
+
+    # クエリの実行前にSQLを確認
+    print(f"   最終クエリ: {qs}")
+    
+    rows = (
+        qs.options(
+            joinedload(PolicyProposal.attachments),
+            joinedload(PolicyProposal.policy_tags)
+        )
+        .order_by(PolicyProposal.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    
+    print(f"   取得結果: {len(rows)}件")
+    for i, row in enumerate(rows[:3]):  # 最初の3件のみ表示
+        print(f"     {i+1}: {row.title} (ID: {row.id})")
+    
+    return rows
