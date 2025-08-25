@@ -115,27 +115,38 @@ def get_current_user(
     token: str = Depends(oauth2_scheme), 
     db: Session = Depends(get_db),
     request: Request = None
-) -> User:  # パラメータの順序を修正
+) -> Union[User, Expert]:  # 戻り値の型を修正
     # 認証情報を取得
     auth_data = get_current_user_authenticated(token, request)
     
-    # データベースからUserオブジェクトを取得
+    # データベースからUserオブジェクトまたはExpertオブジェクトを取得
     user_id = auth_data.get("user_id")
+    user_type = auth_data.get("user_type")
+    
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="ユーザーIDが取得できませんでした"
         )
     
-    # データベースからUserオブジェクトを取得
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="ユーザーが見つかりません"
-        )
-    
-    return user
+    if user_type == "expert":
+        # Expertの場合はExpertテーブルから取得
+        expert = db.query(Expert).filter(Expert.id == user_id).first()
+        if not expert:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="有識者が見つかりません"
+            )
+        return expert
+    else:
+        # Userの場合はUserテーブルから取得
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="ユーザーが見つかりません"
+            )
+        return user
 
 """ 外部有識者の認証情報を取得する関数（セッション管理版） """
 def get_current_expert(token: str = Depends(oauth2_scheme), request: Request = None) -> Dict:

@@ -40,6 +40,14 @@ from app.db.session import SessionLocal
 from app.crud.policy_proposal.policy_proposal import list_attachments_by_policy_proposal_id
 from app.schemas.policy_proposal.policy_proposal import AttachmentOut
 from app.core.security.rate_limit.decorators import rate_limit_comment_post
+from app.core.security.rbac import RBACService
+from app.core.security.rbac.permissions import Permission
+from app.models.user import User
+from app.models.expert import Expert
+from app.core.dependencies import get_current_user_authenticated
+import logging
+
+logger = logging.getLogger(__name__)
 
 def is_valid_uuid(uuid_string: str) -> bool:
     """UUID形式の検証"""
@@ -71,7 +79,8 @@ def get_db():
 @rate_limit_comment_post()
 async def post_comment(
     request: Request,
-    comment_in: PolicyProposalCommentCreate, 
+    comment_in: PolicyProposalCommentCreate,
+    auth_data: dict = Depends(get_current_user_authenticated),  # 追加
     db: Session = Depends(get_db)
 ):
     """
@@ -96,6 +105,33 @@ async def post_comment(
     }
     ```
     """
+    from app.core.security.rbac import RBACService
+    from app.core.security.rbac.permissions import Permission
+    from app.models.user import User
+    from app.models.expert import Expert
+
+    user_id = auth_data.get("user_id")
+    user_type = auth_data.get("user_type")
+    if not user_id or not user_type:
+        raise HTTPException(status_code=401, detail="認証情報が取得できませんでした")
+
+    if user_type == "expert":
+        expert = db.query(Expert).filter(Expert.id == user_id).first()
+        if not expert:
+            raise HTTPException(status_code=401, detail="有識者が見つかりません")
+        if not RBACService.check_expert_permission(expert, Permission.COMMENT_CREATE):
+            raise HTTPException(status_code=403, detail="コメント投稿権限がありません")
+        # 安全のため author_type/author_id をトークンで上書きするならここで行う
+        # comment_in.author_type = "contributor" など
+        # comment_in.author_id = expert.id
+    else:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="ユーザーが見つかりません")
+        if not RBACService.check_user_permission(user, Permission.COMMENT_CREATE):
+            raise HTTPException(status_code=403, detail="コメント投稿権限がありません")
+        # 同様に author_type/author_id を上書きするならここ
+
     try:
         comment = create_comment(db=db, comment_in=comment_in)
         return comment

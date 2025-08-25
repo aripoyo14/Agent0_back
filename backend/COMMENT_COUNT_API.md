@@ -49,8 +49,8 @@ const getCommentCount = async (policyId: string) => {
   try {
     const response = await fetch(`/api/policy-proposal-comments/policy-proposals/${policyId}/comment-count`);
     const data = await response.json();
-    console.log('政策提案ID:', data.policy_proposal_id);
-    console.log('コメント数:', data.comment_count);
+    // console.log('政策提案ID:', data.policy_proposal_id);
+    // console.log('コメント数:', data.comment_count);
     return data.comment_count;
   } catch (error) {
     console.error('エラー:', error);
