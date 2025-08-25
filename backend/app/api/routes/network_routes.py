@@ -1,7 +1,7 @@
 from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, bindparam
 from typing import List, Dict, Tuple
 from math import exp
 
@@ -116,6 +116,58 @@ async def compute_routes(payload: NetworkRouteRequest, db: Session = Depends(get
             ov = overlap_map.get((a, b), 0.0)
             return freq + payload.overlap_coef * ov
 
+        # 2.5) 表示用に users テーブルから氏名を取得（last_name + first_name）
+        # ルート候補に現れる全ユーザーID（U, X, M）を収集
+        user_ids: set[str] = set()
+        user_ids.add(payload.user_id)
+        # X 候補
+        for x_user_id in x_to_z_score.keys():
+            user_ids.add(str(x_user_id))
+        # O/T から得られた隣接（freq_score_map から抽出）
+        for (a, b) in freq_score_map.keys():
+            if isinstance(a, str):
+                user_ids.add(a)
+            else:
+                user_ids.add(str(a))
+            if isinstance(b, str):
+                user_ids.add(b)
+            else:
+                user_ids.add(str(b))
+
+        full_name_map: Dict[str, str] = {}
+        if user_ids:
+            sql_names = text(
+                """
+                SELECT id, last_name, first_name
+                FROM users
+                WHERE id IN :ids
+                """
+            ).bindparams(bindparam("ids", expanding=True))
+            name_rows = db.execute(sql_names, {"ids": list(user_ids)}).mappings().all()
+            for r in name_rows:
+                uid = str(r["id"])
+                ln = r.get("last_name") or ""
+                fn = r.get("first_name") or ""
+                full_name_map[uid] = f"{ln}{fn}".strip()
+
+        # 有識者（Z）の氏名取得
+        expert_full_name = None
+        try:
+            sql_exp = text(
+                """
+                SELECT id, last_name, first_name
+                FROM experts
+                WHERE id = :id
+                """
+            )
+            exp_row = db.execute(sql_exp, {"id": payload.expert_id}).mappings().first()
+            if exp_row:
+                ln = exp_row.get("last_name") or ""
+                fn = exp_row.get("first_name") or ""
+                expert_full_name = f"{ln}{fn}".strip()
+        except Exception:
+            expert_full_name = None
+
         # 3) ルート候補をスコアリング
         routes: List[NetworkRoute] = []
 
@@ -128,9 +180,9 @@ async def compute_routes(payload: NetworkRouteRequest, db: Session = Depends(get
             routes.append(
                 NetworkRoute(
                     path=[
-                        RouteHop(id=payload.user_id, type="user"),
-                        RouteHop(id=x_user_id, type="user"),
-                        RouteHop(id=payload.expert_id, type="expert"),
+                        RouteHop(id=payload.user_id, type="user", name=full_name_map.get(str(payload.user_id))),
+                        RouteHop(id=x_user_id, type="user", name=full_name_map.get(str(x_user_id))),
+                        RouteHop(id=payload.expert_id, type="expert", name=expert_full_name),
                     ],
                     score=total,
                     breakdown=RouteBreakdown(ux_score=ux, xz_score=xz),
@@ -161,10 +213,10 @@ async def compute_routes(payload: NetworkRouteRequest, db: Session = Depends(get
                 routes.append(
                     NetworkRoute(
                         path=[
-                            RouteHop(id=payload.user_id, type="user"),
-                            RouteHop(id=m_user_id, type="user"),
-                            RouteHop(id=x_user_id, type="user"),
-                            RouteHop(id=payload.expert_id, type="expert"),
+                            RouteHop(id=payload.user_id, type="user", name=full_name_map.get(str(payload.user_id))),
+                            RouteHop(id=m_user_id, type="user", name=full_name_map.get(str(m_user_id))),
+                            RouteHop(id=x_user_id, type="user", name=full_name_map.get(str(x_user_id))),
+                            RouteHop(id=payload.expert_id, type="expert", name=expert_full_name),
                         ],
                         score=total,
                         breakdown=RouteBreakdown(um_score=um, mx_score=mx, xz_score=xz),
