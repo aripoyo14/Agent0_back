@@ -1,4 +1,4 @@
-from . import user, auth, policy_proposal_comment, policy_proposal, line, video, cosmos_minutes, outreach, search_network_map
+from . import user, auth, policy_proposal_comment, policy_proposal, line, video, cosmos_minutes, outreach, search_network_map, security_status
 
 __all__ = [
     "user",
@@ -10,5 +10,6 @@ __all__ = [
     "cosmos_minutes",
     "outreach",
     "search_network_map",
+    "security_status",
 ]
 

@@ -27,6 +27,9 @@ import os
 from app.core.security.rbac.decorators import require_user_permissions
 from app.core.security.rbac.permissions import Permission
 
+# 継続的検証と監査ログのデコレータ
+from app.core.security.audit.decorators import continuous_verification_audit, audit_log
+
 # ロガーの設定
 logger = logging.getLogger(__name__)
 
@@ -40,6 +43,11 @@ else:
 router = APIRouter(prefix="/users", tags=["Users"])
 
 @router.post("/register", response_model=UserRegisterResponse)
+@continuous_verification_audit(
+    event_type=AuditEventType.USER_REGISTER_SUCCESS,
+    resource="user",
+    action="register"
+)
 def register_user(
     http_request: Request,
     user_data: UserCreate, 
@@ -142,6 +150,11 @@ def register_user(
 
 # 現在ログイン中のユーザーのプロフィール情報取得用のエンドポイント
 @router.get("/me", response_model=UserOut)
+@continuous_verification_audit(
+    event_type=AuditEventType.DATA_READ,
+    resource="user",
+    action="read_profile"
+)
 def get_user_profile(token: str = Depends(HTTPBearer()), db: Session = Depends(get_db)):
     """
     現在ログイン中のユーザーのプロフィール情報を取得する。
@@ -234,6 +247,11 @@ def get_user_profile(token: str = Depends(HTTPBearer()), db: Session = Depends(g
 
 # デバッグ用：トークンの内容を確認（開発環境のみ）
 @router.get("/debug-token")
+@audit_log(
+    event_type=AuditEventType.DATA_READ,
+    resource="user",
+    action="debug_token"
+)
 def debug_token(token: str = Depends(HTTPBearer())):
     """
     デバッグ用：トークンの内容を確認（開発環境のみ）
@@ -268,6 +286,11 @@ def debug_token(token: str = Depends(HTTPBearer())):
 
 # QRコード生成エンドポイント
 @router.get("/users/{user_id}/profile-qr")
+@audit_log(
+    event_type=AuditEventType.DATA_READ,
+    resource="user",
+    action="generate_qr"
+)
 def generate_profile_qr(user_id: str):
     """ユーザープロフィール用のQRコードを生成"""
     profile_url = f"https://agent0.com/profile/{user_id}"
@@ -280,6 +303,11 @@ def generate_profile_qr(user_id: str):
 
 # 部署一覧取得エンドポイント
 @router.get("/departments", response_model=List[dict])
+@audit_log(
+    event_type=AuditEventType.DATA_READ,
+    resource="department",
+    action="list"
+)
 def get_departments(db: Session = Depends(get_db)):
     """利用可能な部署一覧を取得"""
     departments = db.query(Department).filter(Department.is_active == True).all()
@@ -294,6 +322,11 @@ def get_departments(db: Session = Depends(get_db)):
 
 # 役職一覧取得エンドポイント
 @router.get("/positions", response_model=List[dict])
+@audit_log(
+    event_type=AuditEventType.DATA_READ,
+    resource="position",
+    action="list"
+)
 def get_positions(db: Session = Depends(get_db)):
     """利用可能な役職一覧を取得"""
     positions = db.query(Position).filter(Position.is_active == True).all()
@@ -307,6 +340,11 @@ def get_positions(db: Session = Depends(get_db)):
 
 # ユーザーロール変更エンドポイント
 @router.put("/{user_id}/role", response_model=UserOut)
+@continuous_verification_audit(
+    event_type=AuditEventType.DATA_UPDATE,
+    resource="user",
+    action="role_change"
+)
 def change_user_role(
     user_id: str,
     role_update: RoleUpdateRequest,

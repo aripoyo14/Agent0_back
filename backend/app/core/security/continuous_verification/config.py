@@ -13,7 +13,7 @@ class ContinuousVerificationConfig(BaseSettings):
     # 基本設定
     ENABLED: bool = True  # 本番環境では有効化
     ASYNC_PROCESSING: bool = True  # 非同期処理を有効化
-    DEBUG_MODE: bool = False  # 本番環境では無効化
+    DEBUG_MODE: bool = True  # デバッグモードを有効化（問題解決後はFalseに戻す）
     
     # リスク閾値設定
     LOW_RISK_THRESHOLD: int = 30

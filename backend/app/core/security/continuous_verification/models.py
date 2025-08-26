@@ -44,41 +44,56 @@ class RiskScore(Base):
     __tablename__ = "risk_scores"
     __table_args__ = {'extend_existing': True}
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    session_id = Column(String(36), nullable=False, index=True)
-    user_id = Column(String(36), nullable=True, index=True)
-    risk_score = Column(Integer, nullable=False)
-    risk_level = Column(String(20), nullable=False)
-    factors = Column(JSON, nullable=True)
-    timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    # 実際のDB構造に合わせて修正
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(255), nullable=True, index=True)
+    user_id = Column(String(255), nullable=True, index=True)
+    risk_score = Column(Integer, nullable=True)
+    risk_level = Column(String(50), nullable=True)
+    # 実際のDBのカラム名に合わせて修正
+    risk_factors = Column(JSON, nullable=True)
+    # データベースの実際の構造に合わせてカラム名を変更
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=True)
     ip_address = Column(String(45), nullable=True)  # IPv6対応
     user_agent = Column(Text, nullable=True)
-    endpoint = Column(String(255), nullable=True)
+    endpoint = Column(String(500), nullable=True)
     http_method = Column(String(10), nullable=True)
     
     # インデックス（パフォーマンス向上）
     __table_args__ = (
-        Index('idx_risk_scores_session_timestamp', 'session_id', 'timestamp'),
-        Index('idx_risk_scores_user_timestamp', 'user_id', 'timestamp'),
+        Index('idx_risk_scores_session_created', 'session_id', 'created_at'),
+        Index('idx_risk_scores_user_created', 'user_id', 'created_at'),
         Index('idx_risk_scores_risk_level', 'risk_level'),
         {'extend_existing': True}
     )
     
     def __repr__(self):
         return f"<RiskScore(session_id={self.session_id}, score={self.risk_score}, level={self.risk_level})>"
+    
+    @property
+    def timestamp(self):
+        """後方互換性のためのプロパティ"""
+        return self.created_at
+    
+    @property
+    def factors(self):
+        """後方互換性のためのプロパティ"""
+        return self.risk_factors
 
 class BehaviorPattern(Base):
     """行動パターンテーブル"""
     __tablename__ = "behavior_patterns"
     __table_args__ = {'extend_existing': True}
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(String(36), nullable=False, unique=True, index=True)
-    pattern_data = Column(JSON, nullable=False)
-    last_updated = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
-    confidence_score = Column(Integer, default=0, nullable=False)
-    sample_count = Column(Integer, default=0, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    # 実際のDB構造に合わせて修正
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(255), nullable=True, index=True)
+    pattern_type = Column(String(100), nullable=True)  # 実際のDBに存在
+    pattern_data = Column(JSON, nullable=True)
+    last_updated = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=True)
+    confidence_score = Column(Integer, default=0, nullable=True)
+    sample_count = Column(Integer, default=0, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=True)
     
     def __repr__(self):
         return f"<BehaviorPattern(user_id={self.user_id}, confidence={self.confidence_score})>"
@@ -88,24 +103,35 @@ class ThreatDetection(Base):
     __tablename__ = "threat_detections"
     __table_args__ = {'extend_existing': True}
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    session_id = Column(String(36), nullable=False, index=True)
-    user_id = Column(String(36), nullable=True, index=True)
-    threat_type = Column(String(50), nullable=False)
-    threat_level = Column(String(20), nullable=False)
-    details = Column(JSON, nullable=True)
-    timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
-    mitigated = Column(Boolean, default=False, nullable=False)
-    mitigation_action = Column(String(100), nullable=True)
-    risk_score_at_detection = Column(Integer, nullable=True)
-    
-    # インデックス
-    __table_args__ = (
-        Index('idx_threat_detections_session_timestamp', 'session_id', 'timestamp'),
-        Index('idx_threat_detections_type_level', 'threat_type', 'threat_level'),
-        Index('idx_threat_detections_mitigated', 'mitigated'),
-        {'extend_existing': True}
-    )
+    # 実際のDB構造に合わせて修正
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), nullable=False, index=True)
+    user_type = Column(String(50), nullable=False)  # 実際のDBに存在
+    threat_type = Column(String(100), nullable=False, index=True)
+    threat_level = Column(String(20), nullable=False, index=True)
+    description = Column(Text, nullable=True)  # 実際のDBに存在
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(Text, nullable=True)
+    endpoint = Column(String(255), nullable=True)
+    http_method = Column(String(10), nullable=True)
+    request_data = Column(JSON, nullable=True)  # 実際のDBに存在
+    response_data = Column(JSON, nullable=True)  # 実際のDBに存在
+    confidence_score = Column(String(10), nullable=True)  # 実際のDBに存在
+    detected_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=True, index=True)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    status = Column(String(20), nullable=True)  # 実際のDBに存在
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=True)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=True)
     
     def __repr__(self):
-        return f"<ThreatDetection(session_id={self.session_id}, type={self.threat_type}, level={self.threat_level})>"
+        return f"<ThreatDetection(user_id={self.user_id}, type={self.threat_type}, level={self.threat_level})>"
+    
+    @property
+    def timestamp(self):
+        """後方互換性のためのプロパティ"""
+        return self.detected_at
+    
+    @property
+    def mitigated(self):
+        """後方互換性のためのプロパティ"""
+        return self.status == "resolved"

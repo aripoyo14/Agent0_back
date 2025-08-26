@@ -17,6 +17,8 @@ from app.services.invitation_code import InvitationCodeService
 # 継続的検証システムのインポートを追加
 from app.core.security.continuous_verification.service import ContinuousVerificationService
 from app.core.security.session.manager import session_manager
+# 継続的検証と監査ログのデコレータ
+from app.core.security.audit.decorators import continuous_verification_audit, audit_log
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 import uuid
@@ -53,6 +55,11 @@ def generate_session_id() -> str:
 
 # 新規外部有識者登録用のエンドポイント
 @router.post("/register", response_model=ExpertRegisterResponse)
+@continuous_verification_audit(
+    event_type=AuditEventType.USER_REGISTER_SUCCESS,
+    resource="expert",
+    action="register"
+)
 async def register_expert(
     http_request: Request,
     expert_data: ExpertCreate, 
@@ -224,6 +231,11 @@ async def register_expert(
 
 # 外部有識者ログイン用のエンドポイント
 @router.post("/login", response_model=ExpertLoginResponse)
+@continuous_verification_audit(
+    event_type=AuditEventType.AUTH_LOGIN_SUCCESS,
+    resource="expert",
+    action="login"
+)
 async def login_expert(
     request: ExpertLoginRequest, 
     http_request: Request,
@@ -408,6 +420,11 @@ async def login_expert(
 
 # 現在ログイン中の外部有識者のプロフィール情報取得用のエンドポイント
 @router.get("/me", response_model=ExpertOut)
+@continuous_verification_audit(
+    event_type=AuditEventType.DATA_READ,
+    resource="expert",
+    action="read_profile"
+)
 async def get_expert_profile(
     token: str = Depends(HTTPBearer()), 
     http_request: Request = None,
