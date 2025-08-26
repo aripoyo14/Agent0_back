@@ -1,23 +1,133 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Security
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.schemas.summary import MatchRequest, NetworkMapResponseDTO
 from app.crud.experts_policy_tags import experts_policy_tags_crud
 from app.crud.policy_tag import policy_tag_crud
 from app.core.security.rate_limit.decorators import rate_limit_read_api
-from typing import Optional
+from app.core.security.rbac.permissions import Permission
+from app.core.dependencies import get_current_user_authenticated
+from app.models.user import User
+from app.models.expert import Expert
+from app.core.security.jwt import decode_access_token
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from typing import Optional, Union
+import logging
+
+# HTTPBearerの設定（auto_error=Falseで依存段階の即時403を回避）
+oauth2_scheme = HTTPBearer(auto_error=False)
+
+# ロガーの設定（アプリ全体のロガー設定に従う）
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 router = APIRouter(prefix="/search_network_map", tags=["Search Network Map"])
 
 
 @router.post("/match", response_model=NetworkMapResponseDTO)
-@rate_limit_read_api
 async def match(
-    request: Request, 
-    payload: MatchRequest, 
-    db: Session = Depends(get_db)
+    request: Request,
+    payload: MatchRequest,
+    db: Session = Depends(get_db),
+    token: HTTPAuthorizationCredentials | None = Security(oauth2_scheme),
 ):
+    # 関数開始
+    
+    # 人脈マップ閲覧権限チェック
+    try:
+        # 権限チェック
+
+        # トークン取得（Authorizationヘッダー or Cookie）
+        token_str = None
+        if token and getattr(token, "credentials", None):
+            token_str = token.credentials
+        else:
+            auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
+            if auth_header and auth_header.lower().startswith("bearer "):
+                token_str = auth_header.split(" ", 1)[1]
+            elif request.headers.get("X-Access-Token"):
+                token_str = request.headers.get("X-Access-Token")
+            elif request.headers.get("X-Auth-Token"):
+                token_str = request.headers.get("X-Auth-Token")
+            elif request.headers.get("X-Authorization"):
+                token_str = request.headers.get("X-Authorization")
+                # 先頭に Bearer が付いている場合を許容
+                if token_str.lower().startswith("bearer "):
+                    token_str = token_str.split(" ", 1)[1]
+            elif "access_token" in request.cookies:
+                token_str = request.cookies.get("access_token")
+            elif "jwt" in request.cookies:
+                token_str = request.cookies.get("jwt")
+            elif "token" in request.cookies:
+                token_str = request.cookies.get("token")
+
+        if not token_str:
+            logger.warning("トークンが見つかりません (header/cookie いずれにも存在しません)")
+            raise HTTPException(status_code=401, detail="認証トークンが必要です")
+
+        # JWTトークンをデコード
+        payload_data = decode_access_token(token_str)
+        
+        if not payload_data:
+            raise HTTPException(
+                status_code=401,
+                detail="無効なトークンです"
+            )
+        
+        # 認証データからユーザー情報を取得
+        user_id = payload_data.get("sub")
+        user_type = payload_data.get("user_type")
+        permissions = payload_data.get("scope", [])
+        
+        # 必要最低限の情報のみログ
+        logger.info(f"/search_network_map/match access by user_id={user_id}, user_type={user_type}")
+        
+        if not user_id or not user_type:
+            raise HTTPException(
+                status_code=401,
+                detail="認証情報が不完全です"
+            )
+        
+        # 外部有識者の場合は人脈マップ閲覧権限なし
+        if user_type == "expert":
+            logger.warning(f"外部有識者が人脈マップにアクセスしようとしました: {user_id}")
+            raise HTTPException(
+                status_code=403, 
+                detail="外部有識者は人脈マップを閲覧できません"
+            )
+        
+        # 経産省職員の場合、権限チェック
+        if user_type == "user":
+            # 権限リストを文字列に正規化
+            normalized_permissions = [p.value if isinstance(p, Permission) else p for p in permissions]
+            
+            # system:admin 権限を持つ場合はバイパス
+            if Permission.SYSTEM_ADMIN.value in normalized_permissions:
+                logger.info(f"user {user_id} bypassed by system:admin")
+            elif Permission.SEARCH_NETWORK_READ.value not in normalized_permissions:
+                logger.warning(f"ユーザー {user_id} に人脈マップ閲覧権限がありません: {normalized_permissions}")
+                raise HTTPException(
+                    status_code=403,
+                    detail="人脈マップの閲覧権限がありません"
+                )
+            logger.info(f"user {user_id} permission check ok")
+        else:
+            logger.warning(f"不明なユーザータイプ: {user_type}")
+            raise HTTPException(
+                status_code=403,
+                detail="適切な権限がありません"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"権限チェック中に予期しないエラー: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"権限チェック中にエラーが発生しました: {str(e)}"
+        )
+
     try:
         # 名前からタグIDを解決（単一/複数）
         if not payload.policy_tag:
@@ -89,5 +199,4 @@ async def match(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"マッチング処理中にエラーが発生しました: {str(e)}")
-
 

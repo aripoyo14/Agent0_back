@@ -38,7 +38,7 @@ class RolePermissionMapping:
             Permission.USER_READ, Permission.USER_READ_SELF, Permission.POLICY_CREATE, Permission.POLICY_READ,
             Permission.POLICY_UPDATE, Permission.EXPERT_READ, Permission.COMMENT_CREATE,
             Permission.COMMENT_READ, Permission.COMMENT_UPDATE, Permission.FILE_UPLOAD,
-            Permission.FILE_DOWNLOAD
+            Permission.FILE_DOWNLOAD, Permission.SEARCH_NETWORK_READ  # 人脈マップ閲覧権限を追加
         }
     }
     
@@ -49,12 +49,14 @@ class RolePermissionMapping:
         ExpertRole.CONTRIBUTOR: {
             Permission.POLICY_READ, Permission.EXPERT_READ, Permission.COMMENT_CREATE,
             Permission.COMMENT_READ, Permission.COMMENT_UPDATE, Permission.FILE_DOWNLOAD
+            # 人脈マップ閲覧権限は含めない
         },
 
         # 閲覧者
         ExpertRole.VIEWER: {
             Permission.POLICY_READ, Permission.EXPERT_READ, Permission.COMMENT_READ,
             Permission.FILE_DOWNLOAD
+            # 人脈マップ閲覧権限は含めない
         }
     }
     
