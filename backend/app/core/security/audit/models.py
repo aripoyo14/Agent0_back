@@ -58,6 +58,44 @@ class AuditEventType(str, Enum):
     INVITATION_CODE_USED = "invitation_code_used"
     INVITATION_CODE_DEACTIVATED = "invitation_code_deactivated"
 
+    # 検索・分析系API - 機密情報へのアクセス追跡
+    SEARCH_NETWORK_MAP = "search:network_map"
+    SEARCH_MINUTES = "search:minutes"
+    SEARCH_POLICY_TAGS = "search:policy_tags"
+    SEARCH_EXPERTS = "search:experts"
+    SEARCH_POLICY_PROPOSALS = "search:policy_proposals"
+    SEARCH_COMMENTS = "search:comments"
+    SEARCH_USERS = "search:users"
+    SEARCH_DEPARTMENTS = "search:departments"
+    SEARCH_POSITIONS = "search:positions"
+    
+    # データ読み取り系API - 情報漏洩の追跡
+    READ_EXPERT_PROFILE = "read:expert:profile"
+    READ_EXPERT_INSIGHTS = "read:expert:insights"
+    READ_USER_PROFILE = "read:user:profile"
+    READ_MEETING_DETAILS = "read:meeting:details"
+    READ_MEETING_EVALUATION = "read:meeting:evaluation"
+    READ_POLICY_PROPOSAL = "read:policy_proposal"
+    READ_POLICY_COMMENTS = "read:policy_comments"
+    READ_INVITATION_CODES = "read:invitation_codes"
+    READ_SECURITY_STATUS = "read:security:status"
+    READ_SECURITY_METRICS = "read:security:metrics"
+    READ_SECURITY_CONFIG = "read:security:config"
+    
+    # 権限変更系API - セキュリティ侵害の追跡
+    ROLE_ASSIGNMENT = "role:assignment"
+    ROLE_REMOVAL = "role:removal"
+    PERMISSION_GRANT = "permission:grant"
+    PERMISSION_REVOKE = "permission:revoke"
+    USER_ACTIVATION = "user:activation"
+    USER_DEACTIVATION = "user:deactivation"
+    EXPERT_ACTIVATION = "expert:activation"
+    EXPERT_DEACTIVATION = "expert:deactivation"
+    MFA_ENABLE = "mfa:enable"
+    MFA_DISABLE = "mfa:disable"
+    INVITATION_CODE_GENERATE = "invitation_code:generate"
+    INVITATION_CODE_DEACTIVATE = "invitation_code:deactivate"
+
 
 class AuditLog(Base):
     """監査ログテーブル"""

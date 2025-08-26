@@ -12,12 +12,18 @@ from app.core.security.audit import AuditService, AuditEventType
 from app.db.session import get_db
 from app.core.security.jwt import decode_access_token
 from fastapi.security import HTTPBearer
+from app.core.security.audit import audit_log
 
 router = APIRouter(prefix="/invitation-codes", tags=["Invitation Codes"])
 
 security = HTTPBearer()
 
 @router.post("/generate", response_model=InvitationCodeResponse)
+@audit_log(
+    event_type=AuditEventType.INVITATION_CODE_GENERATE,
+    resource="invitation_code",
+    action="generate"
+)
 def generate_invitation_code(
     http_request: Request,
     invitation_data: InvitationCodeCreate,
@@ -181,6 +187,11 @@ def get_my_invitation_codes(
         )
 
 @router.delete("/{code}")
+@audit_log(
+    event_type=AuditEventType.INVITATION_CODE_DEACTIVATE,
+    resource="invitation_code",
+    action="deactivate"
+)
 def deactivate_invitation_code(
     code: str,
     http_request: Request,

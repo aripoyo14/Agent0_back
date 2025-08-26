@@ -25,7 +25,7 @@ router = APIRouter(prefix="/security", tags=["Security"])
 
 @router.get("/status")
 @audit_log(
-    event_type=AuditEventType.DATA_READ,
+    event_type=AuditEventType.READ_SECURITY_STATUS,
     resource="security",
     action="status_check"
 )
@@ -67,7 +67,7 @@ async def get_security_status(db: Session = Depends(get_db)):
 
 @router.get("/metrics/risk-scores")
 @audit_log(
-    event_type=AuditEventType.DATA_READ,
+    event_type=AuditEventType.READ_SECURITY_METRICS,
     resource="security",
     action="risk_metrics"
 )

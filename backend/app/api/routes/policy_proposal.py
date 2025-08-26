@@ -42,6 +42,9 @@ from app.core.security.rbac.permissions import Permission
 
 import anyio  # 追加
 
+# ユーザー状態注入用の依存関係を追加
+from app.api.routes.search_network_map import inject_user_state
+
 # FastAPIのルーターを初期化
 router = APIRouter(prefix="/policy-proposals", tags=["PolicyProposals"])
 
@@ -60,8 +63,14 @@ def get_db():
 
 # 新規政策案の登録用エンドポイント
 @router.post("/", response_model=ProposalOut)
-def create_policy_proposal(
+@audit_log(
+    event_type=AuditEventType.DATA_CREATE,
+    resource="policy_proposal",
+    action="create"
+)
+async def create_policy_proposal(
     data: ProposalCreate,
+    _: None = Depends(inject_user_state),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permissions(Permission.POLICY_CREATE)),
 ):
@@ -83,12 +92,18 @@ def create_policy_proposal(
 
 # 添付ファイル付き政策案作成エンドポイント
 @router.post("/with-attachments", response_model=ProposalOut)
+@audit_log(
+    event_type=AuditEventType.DATA_CREATE,
+    resource="policy_proposal",
+    action="create_with_attachments"
+)
 async def create_policy_proposal_with_attachments(
     title: str = Form(...),
     body: str = Form(...),
     status: str = Form("published"),  # draftからpublishedに変更
     policy_tag_ids: str = Form(None),  # JSON文字列として受け取り
     files: list[UploadFile] = File(None),
+    _: None = Depends(inject_user_state),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permissions(Permission.POLICY_CREATE)),
 ):
@@ -174,7 +189,7 @@ async def create_policy_proposal_with_attachments(
     except Exception as e:
         logger.error(f"政策提案作成エラー: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=500,
             detail="政策提案の作成に失敗しました"
         )
 
@@ -185,7 +200,7 @@ async def create_policy_proposal_with_attachments(
 # 政策案の一覧取得（簡易検索・ページング付き）
 @router.get("/", response_model=list[ProposalOut])
 @audit_log(
-    event_type=AuditEventType.DATA_READ,
+    event_type=AuditEventType.SEARCH_POLICY_PROPOSALS,
     resource="policy_proposal",
     action="list"
 )
@@ -272,7 +287,7 @@ async def get_policy_proposals(
 # 投稿履歴取得エンドポイント
 @router.get("/my-submissions", response_model=dict)
 @audit_log(
-    event_type=AuditEventType.DATA_READ, 
+    event_type=AuditEventType.READ_POLICY_PROPOSAL, 
     resource="policy_proposal", 
     action="list_user_submissions"
 )

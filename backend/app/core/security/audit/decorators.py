@@ -31,6 +31,7 @@ except Exception:
 
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 # ------------------------------
@@ -78,6 +79,8 @@ def _extract_user(
     優先順位:
       kwargs['current_user'] → args の user らしきもの → request.state.user → 明示引数
     """
+    logger.debug(f"_extract_user called with explicit_user_id={explicit_user_id}, explicit_user_type={explicit_user_type}")
+    
     user_obj = kwargs.get("current_user")
 
     if user_obj is None:
@@ -85,32 +88,47 @@ def _extract_user(
         for a in args:
             if hasattr(a, "id") and (hasattr(a, "role") or hasattr(a, "user_type")):
                 user_obj = a
+                logger.debug(f"Found user_obj in args: {a}")
                 break
             if isinstance(a, dict) and ("user_id" in a or "role" in a or "user_type" in a):
                 user_obj = a
+                logger.debug(f"Found user_obj dict in args: {a}")
                 break
 
     if user_obj is None and request is not None:
         user_obj = getattr(getattr(request, "state", None), "user", None)
+        logger.debug(f"request.state.user: {user_obj}")
+        if hasattr(request.state, 'user_id'):
+            logger.debug(f"request.state.user_id: {request.state.user_id}")
+        if hasattr(request.state, 'user_type'):
+            logger.debug(f"request.state.user_type: {request.state.user_type}")
 
     user_id = explicit_user_id
     user_type = explicit_user_type
 
     if user_obj is not None:
+        logger.debug(f"Processing user_obj: {user_obj}")
         if hasattr(user_obj, "id"):
             user_id = str(getattr(user_obj, "id"))
+            logger.debug(f"Extracted user_id from user_obj.id: {user_id}")
         elif isinstance(user_obj, dict) and "user_id" in user_obj:
             user_id = str(user_obj["user_id"])
+            logger.debug(f"Extracted user_id from user_obj dict: {user_id}")
 
         if hasattr(user_obj, "role"):
             user_type = getattr(user_obj, "role")
+            logger.debug(f"Extracted user_type from user_obj.role: {user_type}")
         elif hasattr(user_obj, "user_type"):
             user_type = getattr(user_obj, "user_type")
+            logger.debug(f"Extracted user_type from user_obj.user_type: {user_type}")
         elif isinstance(user_obj, dict) and "role" in user_obj:
             user_type = user_obj["role"]
+            logger.debug(f"Extracted user_type from user_obj dict role: {user_type}")
         elif isinstance(user_obj, dict) and "user_type" in user_obj:
             user_type = user_obj["user_type"]
+            logger.debug(f"Extracted user_type from user_obj dict user_type: {user_type}")
 
+    logger.debug(f"Final result: user_id={user_id}, user_type={user_type}")
     return user_id, user_type
 
 
@@ -126,9 +144,10 @@ async def _audit_log_async(
     request: Optional[Request],
     details: Dict[str, Any],
 ) -> None:
-    """AuditService.log_event() は非同期前提で await する"""
+    """AuditService.log_event() を非同期で実行"""
     try:
-        await audit_service.log_event(
+        # AuditService.log_eventは同期関数なので、awaitは不要
+        audit_service.log_event(
             event_type=event_type,
             resource=resource,
             action=action,
@@ -156,12 +175,11 @@ def _audit_log_sync_in_thread(
     details: Dict[str, Any],
 ) -> None:
     """
-    同期エンドポイント（FastAPI はスレッドプールで実行されがち）から
-    非同期メソッドを安全に実行するため anyio.from_thread.run を使う。
+    同期エンドポイント用の監査ログ実行
     """
     try:
-        from_thread.run(
-            audit_service.log_event,
+        # 同期版の監査ログ実行
+        audit_service.log_event(
             event_type=event_type,
             resource=resource,
             action=action,
