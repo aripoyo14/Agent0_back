@@ -45,6 +45,9 @@ from app.core.security.rbac.permissions import Permission
 from app.models.user import User
 from app.models.expert import Expert
 from app.core.dependencies import get_current_user_authenticated
+# 継続的検証と監査ログのデコレータ
+from app.core.security.audit.decorators import continuous_verification_audit, audit_log
+from app.core.security.audit import AuditEventType
 import logging
 
 logger = logging.getLogger(__name__)
@@ -77,6 +80,16 @@ def get_db():
 # 新規コメント投稿用のエンドポイント
 @router.post("/", response_model=PolicyProposalCommentResponse)
 @rate_limit_comment_post()
+@continuous_verification_audit(
+    event_type=AuditEventType.DATA_CREATE,
+    resource="comment",
+    action="create"
+)
+@audit_log(
+    event_type=AuditEventType.DATA_CREATE,
+    resource="comment",
+    action="create"
+)
 async def post_comment(
     request: Request,
     comment_in: PolicyProposalCommentCreate,
@@ -142,6 +155,16 @@ async def post_comment(
 
 # 単一コメント取得
 @router.get("/{comment_id}", response_model=PolicyProposalCommentResponse)
+@continuous_verification_audit(
+    event_type=AuditEventType.DATA_READ,
+    resource="comment",
+    action="read"
+)
+@audit_log(
+    event_type=AuditEventType.DATA_READ,
+    resource="comment",
+    action="read"
+)
 def get_comment(comment_id: str, db: Session = Depends(get_db)):
     """
     単一コメントを取得する。
@@ -169,6 +192,16 @@ def get_comment(comment_id: str, db: Session = Depends(get_db)):
 
 # 特定の政策案IDに紐づくコメント一覧取得
 @router.get("/by-proposal/{policy_proposal_id}", response_model=list[PolicyProposalCommentResponse])
+@continuous_verification_audit(
+    event_type=AuditEventType.DATA_READ,
+    resource="comment",
+    action="list"
+)
+@audit_log(
+    event_type=AuditEventType.DATA_READ,
+    resource="comment",
+    action="list"
+)
 def list_comments(policy_proposal_id: str, db: Session = Depends(get_db), limit: int = 50, offset: int = 0):
     """
     特定の政策案IDに紐づくコメント一覧を取得する。
@@ -196,6 +229,16 @@ def list_comments(policy_proposal_id: str, db: Session = Depends(get_db), limit:
 
 # 指定ユーザーが投稿した政策案に紐づくコメント一覧を取得
 @router.get("/by-user/{user_id}", response_model=list[PolicyWithComments])
+@continuous_verification_audit(
+    event_type=AuditEventType.DATA_READ,
+    resource="comment",
+    action="list_by_user"
+)
+@audit_log(
+    event_type=AuditEventType.DATA_READ,
+    resource="comment",
+    action="list_by_user"
+)
 def list_comments_for_user_policies(
     user_id: str,
     db: Session = Depends(get_db),
@@ -235,6 +278,16 @@ def list_comments_for_user_policies(
 
 # 既存コメントに対する返信の投稿
 @router.post("/{parent_comment_id}/replies", response_model=PolicyProposalCommentResponse)
+@continuous_verification_audit(
+    event_type=AuditEventType.DATA_CREATE,
+    resource="comment",
+    action="create_reply"
+)
+@audit_log(
+    event_type=AuditEventType.DATA_CREATE,
+    resource="comment",
+    action="create_reply"
+)
 def post_reply(
     parent_comment_id: str,
     reply_in: PolicyProposalReplyCreate,
@@ -285,6 +338,16 @@ def post_reply(
 
 # OpenAIで返信文案を生成
 @router.post("/{comment_id}/ai-reply")
+@continuous_verification_audit(
+    event_type=AuditEventType.DATA_CREATE,
+    resource="comment",
+    action="ai_reply"
+)
+@audit_log(
+    event_type=AuditEventType.DATA_CREATE,
+    resource="comment",
+    action="ai_reply"
+)
 def generate_reply_suggestion(
     comment_id: str,
     req: AIReplyRequest,
@@ -376,6 +439,16 @@ def generate_reply_suggestion(
 
 # コメントの評価を更新
 @router.patch("/{comment_id}/rating", response_model=CommentRatingResponse)
+@continuous_verification_audit(
+    event_type=AuditEventType.DATA_UPDATE,
+    resource="comment",
+    action="update_rating"
+)
+@audit_log(
+    event_type=AuditEventType.DATA_UPDATE,
+    resource="comment",
+    action="update_rating"
+)
 def update_rating(
     comment_id: str,
     rating_in: CommentRatingCreate,
@@ -431,6 +504,16 @@ def update_rating(
 
 # ファイル解析比較テスト用エンドポイント
 @router.post("/{comment_id}/analyze-files-compare")
+@continuous_verification_audit(
+    event_type=AuditEventType.DATA_READ,
+    resource="comment",
+    action="analyze_files"
+)
+@audit_log(
+    event_type=AuditEventType.DATA_READ,
+    resource="comment",
+    action="analyze_files"
+)
 def analyze_files_compare(
     comment_id: str,
     db: Session = Depends(get_db),
@@ -560,6 +643,16 @@ def analyze_files_compare(
 ------------------------ """
 
 @router.get("/{comment_id}/attachments", response_model=list[AttachmentOut])
+@continuous_verification_audit(
+    event_type=AuditEventType.DATA_READ,
+    resource="comment",
+    action="list_attachments"
+)
+@audit_log(
+    event_type=AuditEventType.DATA_READ,
+    resource="comment",
+    action="list_attachments"
+)
 def list_attachments_for_comment(
     comment_id: str,
     db: Session = Depends(get_db),
@@ -624,6 +717,16 @@ def list_attachments_for_comment(
 
 # コメント数取得API
 @router.get("/policy-proposals/{policy_proposal_id}/comment-count", response_model=PolicyProposalCommentsCountResponse)
+@continuous_verification_audit(
+    event_type=AuditEventType.DATA_READ,
+    resource="comment",
+    action="count"
+)
+@audit_log(
+    event_type=AuditEventType.DATA_READ,
+    resource="comment",
+    action="count"
+)
 def get_comment_count_by_policy_proposal_endpoint(
     policy_proposal_id: str,
     db: Session = Depends(get_db)
@@ -669,6 +772,16 @@ def get_comment_count_by_policy_proposal_endpoint(
 
 # 返信コメント取得API
 @router.get("/{parent_comment_id}/replies", response_model=RepliesResponse)
+@continuous_verification_audit(
+    event_type=AuditEventType.DATA_READ,
+    resource="comment",
+    action="list_replies"
+)
+@audit_log(
+    event_type=AuditEventType.DATA_READ,
+    resource="comment",
+    action="list_replies"
+)
 def get_replies_by_parent_comment(
     parent_comment_id: str,
     limit: int = Query(20, ge=1, le=100, description="取得件数制限"),
@@ -749,6 +862,16 @@ def get_replies_by_parent_comment(
 
 # 返信コメント件数取得API
 @router.get("/{parent_comment_id}/replies/count", response_model=ReplyCountResponse)
+@continuous_verification_audit(
+    event_type=AuditEventType.DATA_READ,
+    resource="comment",
+    action="count_replies"
+)
+@audit_log(
+    event_type=AuditEventType.DATA_READ,
+    resource="comment",
+    action="count_replies"
+)
 def get_reply_count_by_parent_comment(
     parent_comment_id: str,
     db: Session = Depends(get_db)

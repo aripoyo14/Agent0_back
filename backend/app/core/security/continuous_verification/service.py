@@ -48,16 +48,30 @@ class ContinuousVerificationService:
             return True
         
         try:
+            # user_idとuser_typeのバリデーションとデフォルト値設定
+            if not user_id:
+                # request.stateからuser_idを取得を試行
+                user_id = getattr(getattr(request, "state", None), "user_id", None)
+            if not user_type:
+                # request.stateからuser_typeを取得を試行
+                user_type = getattr(getattr(request, "state", None), "user_type", None)
+            
+            # 最終的なデフォルト値設定
+            final_user_id = user_id or "unknown"
+            final_user_type = user_type or "unknown"
+            
+            logger.debug(f"継続的検証開始: session_id={session_id}, user_id={final_user_id}, user_type={final_user_type}")
+            
             # 非同期で監視処理を実行（メイン処理をブロックしない）
             if self.config.ASYNC_PROCESSING:
                 asyncio.create_task(
-                    self._background_monitoring(session_id, request, user_id, user_type)
+                    self._background_monitoring(session_id, request, final_user_id, final_user_type)
                 )
                 return True  # 即座にアクセス許可
             
             # 同期的な監視処理（設定で選択可能）
             else:
-                return await self._synchronous_monitoring(session_id, request, user_id, user_type)
+                return await self._synchronous_monitoring(session_id, request, final_user_id, final_user_type)
                 
         except Exception as e:
             logger.error(f"セッション監視でエラー: {e}")
@@ -79,11 +93,11 @@ class ContinuousVerificationService:
             )
             
             # リスクスコアの記録
-            await self._record_risk_score(session_id, risk_score, risk_factors, request)
+            await self._record_risk_score(session_id, risk_score, risk_factors, request, user_id, user_type)
             
             # 脅威検出
             if self.config.THREAT_DETECTION_ENABLED:
-                await self._detect_threats(session_id, risk_score, risk_factors, request)
+                await self._detect_threats(session_id, risk_score, risk_factors, request, user_id, user_type)
             
             # 行動パターンの更新
             if self.config.BEHAVIOR_LEARNING_ENABLED and user_id:
@@ -112,7 +126,7 @@ class ContinuousVerificationService:
             )
             
             # リスクスコアの記録
-            await self._record_risk_score(session_id, risk_score, risk_factors, request)
+            await self._record_risk_score(session_id, risk_score, risk_factors, request, user_id, user_type)
             
             # 極めて高いリスクの場合のみアクセス拒否
             if risk_score > self.config.EXTREME_RISK_THRESHOLD:
@@ -131,27 +145,43 @@ class ContinuousVerificationService:
         session_id: str, 
         risk_score: int, 
         risk_factors: List[Any], 
-        request: Request
+        request: Request,
+        user_id: Optional[str] = None,
+        user_type: Optional[str] = None
     ):
         """リスクスコアを記録"""
         try:
             risk_level = RiskLevel.from_score(risk_score)
             
+            # user_idとuser_typeのバリデーションとデフォルト値設定
+            if not user_id:
+                # request.stateからuser_idを取得を試行
+                user_id = getattr(getattr(request, "state", None), "user_id", None)
+            if not user_type:
+                # request.stateからuser_typeを取得を試行
+                user_type = getattr(getattr(request, "state", None), "user_type", None)
+            
+            # 最終的なデフォルト値設定
+            final_user_id = user_id or "unknown"
+            final_user_type = user_type or "unknown"
+            
+            # user_idとuser_typeを明示的に設定
             risk_record = RiskScore(
                 session_id=session_id,
+                user_id=final_user_id,  # user_idを明示的に設定
                 risk_score=risk_score,
                 risk_level=risk_level.value,
-                factors=[factor.__dict__ for factor in risk_factors] if risk_factors and hasattr(risk_factors[0], '__dict__') else risk_factors,
+                risk_factors=[factor.__dict__ for factor in risk_factors] if risk_factors and hasattr(risk_factors[0], '__dict__') else risk_factors,
                 ip_address=self._get_client_ip(request),
                 user_agent=request.headers.get("user-agent"),
-                endpoint=str(request.url.path),
+                endpoint=getattr(request, 'path', str(request.url.path) if hasattr(request, 'url') else '/unknown'),
                 http_method=request.method
             )
             
             self.db.add(risk_record)
             self.db.commit()
             
-            logger.debug(f"リスクスコア記録完了: session={session_id}, score={risk_score}, level={risk_level.value}")
+            logger.debug(f"リスクスコア記録完了: session={session_id}, user_id={final_user_id}, user_type={final_user_type}, score={risk_score}, level={risk_level.value}")
             
         except Exception as e:
             logger.error(f"リスクスコア記録でエラー: {e}")
@@ -162,11 +192,25 @@ class ContinuousVerificationService:
         session_id: str, 
         risk_score: int, 
         risk_factors: List[Any], 
-        request: Request
+        request: Request,
+        user_id: Optional[str] = None,
+        user_type: Optional[str] = None
     ):
         """脅威を検出"""
         try:
             threats = []
+            
+            # user_idとuser_typeのバリデーションとデフォルト値設定
+            if not user_id:
+                # request.stateからuser_idを取得を試行
+                user_id = getattr(getattr(request, "state", None), "user_id", None)
+            if not user_type:
+                # request.stateからuser_typeを取得を試行
+                user_type = getattr(getattr(request, "state", None), "user_type", None)
+            
+            # 最終的なデフォルト値設定
+            final_user_id = user_id or "unknown"
+            final_user_type = user_type or "unknown"
             
             # リスクスコアに基づく脅威検出
             if risk_score > self.config.HIGH_RISK_THRESHOLD:
@@ -185,16 +229,29 @@ class ContinuousVerificationService:
             # 脅威記録
             for threat_type in threats:
                 threat_record = ThreatDetection(
-                    session_id=session_id,
+                    user_id=final_user_id,  # user_idを明示的に設定
+                    user_type=final_user_type,  # user_typeを明示的に設定
                     threat_type=threat_type.value,
                     threat_level=RiskLevel.from_score(risk_score).value,
-                    details={
+                    description=f"High risk activity detected: {threat_type.value}",
+                    ip_address=self._get_client_ip(request),
+                    user_agent=request.headers.get("user-agent"),
+                    endpoint=getattr(request, 'path', str(request.url.path) if hasattr(request, 'url') else '/unknown'),
+                    http_method=request.method,
+                    request_data={
+                        "session_id": session_id,
                         "risk_score": risk_score,
-                        "risk_factors": [f.name for f in risk_factors] if risk_factors and hasattr(risk_factors[0], 'name') else [],
-                        "endpoint": str(request.url.path),
-                        "http_method": request.method
+                        "endpoint": getattr(request, 'path', str(request.url.path) if hasattr(request, 'url') else '/unknown'),
+                        "method": request.method
                     },
-                    risk_score_at_detection=risk_score
+                    response_data={
+                        "threat_detected": True,
+                        "threat_type": threat_type.value,
+                        "risk_score": risk_score
+                    },
+                    confidence_score="high",
+                    status="active",
+                    detected_at=datetime.now(timezone.utc)
                 )
                 
                 self.db.add(threat_record)
@@ -202,7 +259,7 @@ class ContinuousVerificationService:
             self.db.commit()
             
             if threats:
-                logger.warning(f"脅威検出: session={session_id}, threats={threats}, score={risk_score}")
+                logger.warning(f"脅威検出: session={session_id}, user_id={final_user_id}, user_type={final_user_type}, threats={threats}, score={risk_score}")
             
         except Exception as e:
             logger.error(f"脅威検出でエラー: {e}")
@@ -223,7 +280,7 @@ class ContinuousVerificationService:
             
             # 新しい行動データ
             new_behavior = {
-                "endpoint": str(request.url.path),
+                "endpoint": getattr(request, 'path', str(request.url.path) if hasattr(request, 'url') else '/unknown'),
                 "method": request.method,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "risk_score": sum(f.score for f in risk_factors) / len(risk_factors) if risk_factors else 0,
@@ -307,7 +364,7 @@ class ContinuousVerificationService:
                 "session_id": session_id,
                 "risk_score": risk_score,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "endpoint": str(request.url.path),
+                "endpoint": getattr(request, 'path', str(request.url.path) if hasattr(request, 'url') else '/unknown'),
                 "ip_address": self._get_client_ip(request)
             }
             
@@ -327,7 +384,7 @@ class ContinuousVerificationService:
                 details={
                     "session_id": session_id,
                     "risk_score": risk_score,
-                    "endpoint": str(request.url.path),
+                    "endpoint": getattr(request, 'path', str(request.url.path) if hasattr(request, 'url') else '/unknown'),
                     "ip_address": self._get_client_ip(request)
                 }
             )
@@ -367,7 +424,7 @@ class ContinuousVerificationService:
             
             self.db.query(RiskScore).filter(
                 RiskScore.session_id == session_id,
-                RiskScore.timestamp < cutoff_time
+                RiskScore.created_at < cutoff_time
             ).delete()
             
             self.db.commit()

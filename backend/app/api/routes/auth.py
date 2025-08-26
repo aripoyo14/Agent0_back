@@ -53,7 +53,7 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
     user_type="user",
     session_id_key="session_id"
 )
-def login_user(
+async def login_user(
     http_request: Request, 
     request: LoginRequest, 
     db: Session = Depends(get_db),
@@ -108,24 +108,36 @@ def login_user(
                         detail="セッションの作成に失敗しました"
                     )
 
+                # 継続的検証システム用にsession_idをrequest.stateに設定
+                http_request.state.session_id = session_id
+                http_request.state.user_id = str(user.id)
+                http_request.state.user_type = "user"
+                
+                logger.debug(f"継続的検証用情報設定完了: session_id={session_id}, user_id={user.id}, user_type=user")
+                
                 # アクセストークンとリフレッシュトークンを作成
                 access_token = session_manager._create_access_token(
                     str(user.id), "user", list(user_permissions), session_id, user.role
                 )
                 refresh_token = session_manager._create_refresh_token(session_id)
                 
-                # 継続監視用のsession_idをkwargsに追加（安全な方法）
+                # 継続的検証システム用のsession_idを明示的に設定
+                # デコレータがkwargsからsession_idを取得できるようにする
                 try:
-                    # 現在のフレームを安全に取得
+                    import inspect
                     current_frame = inspect.currentframe()
                     if current_frame and current_frame.f_back:
-                        # フレームのローカル変数にsession_idを追加
-                        frame_locals = current_frame.f_back.f_locals
-                        if 'kwargs' in frame_locals:
-                            frame_locals['kwargs']['session_id'] = session_id
+                        # 呼び出し元のフレームのkwargsにsession_idを追加
+                        caller_frame = current_frame.f_back
+                        if 'kwargs' in caller_frame.f_locals:
+                            caller_frame.f_locals['kwargs']['session_id'] = session_id
+                            logger.debug(f"継続的検証用session_id設定完了: {session_id}")
+                        else:
+                            logger.warning("継続的検証用session_id設定失敗: kwargsが見つかりません")
+                    else:
+                        logger.warning("継続的検証用session_id設定失敗: フレーム情報が取得できません")
                 except Exception as e:
-                    # inspectエラーが発生しても認証処理は継続
-                    logger.warning(f"継続監視用session_id設定でエラー: {e}")
+                    logger.warning(f"継続的検証用session_id設定でエラー: {e}")
                     pass
                 
                 # 成功時の監査ログ
@@ -210,25 +222,52 @@ def login_user(
                         detail="セッションの作成に失敗しました"
                     )
 
+                # 継続的検証システム用にsession_idをrequest.stateに設定
+                http_request.state.session_id = session_id
+                http_request.state.user_id = str(expert.id)
+                http_request.state.user_type = "expert"
+                
+                logger.debug(f"継続的検証用情報設定完了: session_id={session_id}, user_id={expert.id}, user_type=expert")
+
                 # アクセストークンとリフレッシュトークンを作成
                 access_token = session_manager._create_access_token(
                     str(expert.id), "expert", list(expert_permissions), session_id, expert.role
                 )
                 refresh_token = session_manager._create_refresh_token(session_id)
                 
-                # 継続監視用のsession_idをkwargsに追加（安全な方法）
+                # 継続的検証システム用のsession_idを明示的に設定
+                # デコレータがkwargsからsession_idを取得できるようにする
                 try:
-                    # 現在のフレームを安全に取得
+                    import inspect
                     current_frame = inspect.currentframe()
                     if current_frame and current_frame.f_back:
-                        # フレームのローカル変数にsession_idを追加
-                        frame_locals = current_frame.f_back.f_locals
-                        if 'kwargs' in frame_locals:
-                            frame_locals['kwargs']['session_id'] = session_id
+                        # 呼び出し元のフレームのkwargsにsession_idを追加
+                        caller_frame = current_frame.f_back
+                        if 'kwargs' in caller_frame.f_locals:
+                            caller_frame.f_locals['kwargs']['session_id'] = session_id
+                            logger.debug(f"継続的検証用session_id設定完了: {session_id}")
+                        else:
+                            logger.warning("継続的検証用session_id設定失敗: kwargsが見つかりません")
+                    else:
+                        logger.warning("継続的検証用session_id設定失敗: フレーム情報が取得できません")
                 except Exception as e:
-                    # inspectエラーが発生しても認証処理は継続
-                    logger.warning(f"継続監視用session_id設定でエラー: {e}")
+                    logger.warning(f"継続的検証用session_id設定でエラー: {e}")
                     pass
+                
+                # 継続的検証システム用のsession_idを明示的に設定
+                # デコレータがkwargsからsession_idを取得できるようにする
+                import inspect
+                current_frame = inspect.currentframe()
+                if current_frame and current_frame.f_back:
+                    # 呼び出し元のフレームのkwargsにsession_idを追加
+                    caller_frame = current_frame.f_back
+                    if 'kwargs' in caller_frame.f_locals:
+                        caller_frame.f_locals['kwargs']['session_id'] = session_id
+                        logger.debug(f"継続的検証用session_id設定完了: {session_id}")
+                    else:
+                        logger.warning("継続的検証用session_id設定失敗: kwargsが見つかりません")
+                else:
+                    logger.warning("継続的検証用session_id設定失敗: フレーム情報が取得できません")
                 
                 # 成功時の監査ログ
                 try:

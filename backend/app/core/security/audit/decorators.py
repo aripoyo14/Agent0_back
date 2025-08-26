@@ -357,8 +357,24 @@ def continuous_verification_audit(
                     request = _extract_request(args, kwargs)
                     db = _extract_db(args, kwargs, request)
 
-                    sid = kwargs.get(session_id_key, "unknown")
+                    # session_idの取得を改善
+                    sid = kwargs.get(session_id_key)
+                    if not sid or sid == "unknown":
+                        # request.stateからsession_idを取得を試行
+                        sid = getattr(getattr(request, "state", None), "session_id", None)
+                    if not sid:
+                        # デフォルト値
+                        sid = "unknown"
+                    
                     uid, utype = _extract_user(args, kwargs, request, user_id, user_type)
+                    
+                    # request.stateからuser_idとuser_typeも取得を試行
+                    if not uid:
+                        uid = getattr(getattr(request, "state", None), "user_id", uid)
+                    if not utype:
+                        utype = getattr(getattr(request, "state", None), "user_type", utype)
+                    
+                    logger.debug(f"継続的検証情報取得: session_id={sid}, user_id={uid}, user_type={utype}")
 
                     if db is not None and request is not None:
                         cv = ContinuousVerificationService(db)
@@ -391,8 +407,24 @@ def continuous_verification_audit(
                     request = _extract_request(args, kwargs)
                     db = _extract_db(args, kwargs, request)
 
-                    sid = kwargs.get(session_id_key, "unknown")
+                    # session_idの取得を改善
+                    sid = kwargs.get(session_id_key)
+                    if not sid or sid == "unknown":
+                        # request.stateからsession_idを取得を試行
+                        sid = getattr(getattr(request, "state", None), "session_id", None)
+                    if not sid:
+                        # デフォルト値
+                        sid = "unknown"
+                    
                     uid, utype = _extract_user(args, kwargs, request, user_id, user_type)
+                    
+                    # request.stateからuser_idとuser_typeも取得を試行
+                    if not uid:
+                        uid = getattr(getattr(request, "state", None), "user_id", uid)
+                    if not utype:
+                        utype = getattr(getattr(request, "state", None), "user_type", utype)
+                    
+                    logger.debug(f"継続的検証情報取得: session_id={sid}, user_id={uid}, user_type={utype}")
 
                     if db is not None and request is not None:
                         cv = ContinuousVerificationService(db)
