@@ -7,6 +7,7 @@ from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 from typing import Type, Union, Optional, Dict
 from datetime import datetime, timezone
+import logging
 
 from app.db.session import SessionLocal
 from app.models.user import User
@@ -16,8 +17,11 @@ from app.core.security.session import session_manager
 from app.core.security.rbac import RBACService
 from app.core.security.rbac.permissions import Permission  # この行を追加
 
-# 認証用のOAuth2スキームを定義
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+# ロガーの設定
+logger = logging.getLogger(__name__)
+
+# 認証用のOAuth2スキームを定義（正しいパスに修正）
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 """ DBセッションを取得する関数 """
 def get_db():
@@ -42,6 +46,9 @@ def get_current_user_authenticated(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
+    # デバッグログを追加
+    logger.debug(f"認証開始: token length = {len(token) if token else 0}")
+    
     # JWTトークンを検証
     try:
         payload = jwt.decode(
@@ -50,27 +57,42 @@ def get_current_user_authenticated(
             algorithms=[settings.algorithm]
         )
         
+        logger.debug(f"JWTデコード成功: payload = {payload}")
+        
         # セッションIDを取得
         session_id = payload.get("session_id")
         if not session_id:
+            logger.error("セッションIDがトークンに含まれていません")
             raise credentials_exception
+        
+        logger.debug(f"セッションID: {session_id}")
         
         # セッションの有効性をチェック
         session_data = session_manager.validate_session(session_id)
         if not session_data:
+            logger.error(f"セッション {session_id} が無効です")
             raise credentials_exception
+        
+        logger.debug(f"セッション検証成功: {session_data}")
         
         # 最終アクティビティを更新
         session_data.last_activity = datetime.now(timezone.utc)
         
-        return {
+        result = {
             "user_id": payload.get("sub"),
             "user_type": payload.get("user_type"),
             "permissions": payload.get("scope", []),
             "session_id": session_id
         }
         
-    except JWTError:
+        logger.debug(f"認証成功: {result}")
+        return result
+        
+    except JWTError as e:
+        logger.error(f"JWTデコードエラー: {e}")
+        raise credentials_exception
+    except Exception as e:
+        logger.error(f"予期しない認証エラー: {e}")
         raise credentials_exception
 
 

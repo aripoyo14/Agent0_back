@@ -8,9 +8,10 @@ from sqlalchemy.orm import Session
 import logging
 from app.models.user import User, UsersDepartments, UsersPositions
 from app.schemas.user import UserCreate
-from uuid import uuid4
+from uuid import uuid4, UUID
 from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException, status
+from typing import Optional
 
 # ロガーの設定
 logger = logging.getLogger(__name__)
@@ -184,3 +185,18 @@ def encrypt_existing_user_data(db: Session, user_id: str):
         db.commit()
         return True
     return False
+
+def get_user_by_id(db: Session, user_id: str) -> Optional[User]:
+    """
+    IDでユーザーを取得
+    """
+    try:
+        # UUIDの場合は文字列に変換
+        if isinstance(user_id, str):
+            user_id = UUID(user_id)
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        return user
+    except (ValueError, TypeError):
+        # 無効なUUID形式の場合はNoneを返す
+        return None

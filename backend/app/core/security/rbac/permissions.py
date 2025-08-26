@@ -42,6 +42,10 @@ class Permission(str, Enum):
     FILE_UPLOAD = "file:upload"        # ファイルアップロード
     FILE_DOWNLOAD = "file:download"    # ファイルダウンロード
     FILE_DELETE = "file:delete"        # ファイル削除
+    
+    # --- 検索・ネットワークマップ管理（経産省職員のみ） ---
+    SEARCH_NETWORK_READ = "search_network:read"    # ネットワークマップ検索・閲覧（経産省職員のみ）
+    SEARCH_NETWORK_EXPORT = "search_network:export"    # ネットワークマップデータエクスポート（経産省職員のみ）
 
 """ 権限グループ（関連する権限をまとめる） """
 PERMISSION_GROUPS = {
@@ -78,6 +82,11 @@ PERMISSION_GROUPS = {
     # ファイル管理関連
     "file_management": [
         Permission.FILE_UPLOAD, Permission.FILE_DOWNLOAD, Permission.FILE_DELETE
+    ],
+    
+    # 検索・ネットワークマップ関連（経産省職員のみ）
+    "search_network_management": [
+        Permission.SEARCH_NETWORK_READ, Permission.SEARCH_NETWORK_EXPORT
     ]
 }
 
