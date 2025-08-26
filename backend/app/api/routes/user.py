@@ -20,7 +20,7 @@ from app.db.session import get_db
 from app.services.qr_code import QRCodeService
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 import os
 
 # RBAC関連のインポート
@@ -29,6 +29,17 @@ from app.core.security.rbac.permissions import Permission
 
 # 継続的検証と監査ログのデコレータ
 from app.core.security.audit.decorators import continuous_verification_audit, audit_log
+
+# 追加: リクエストボディ用スキーマ
+class ActivationUpdateRequest(BaseModel):
+    activation: bool
+
+class PermissionsChangeRequest(BaseModel):
+    permissions: List[str]
+    action: str  # "grant" or "revoke"
+
+class MFAUpdateRequest(BaseModel):
+    mfa_enabled: bool
 
 # ロガーの設定
 logger = logging.getLogger(__name__)
@@ -151,7 +162,7 @@ def register_user(
 # 現在ログイン中のユーザーのプロフィール情報取得用のエンドポイント
 @router.get("/me", response_model=UserOut)
 @continuous_verification_audit(
-    event_type=AuditEventType.DATA_READ,
+    event_type=AuditEventType.READ_USER_PROFILE,
     resource="user",
     action="read_profile"
 )
@@ -340,8 +351,13 @@ def get_positions(db: Session = Depends(get_db)):
 
 # ユーザーロール変更エンドポイント
 @router.put("/{user_id}/role", response_model=UserOut)
+@audit_log(
+    event_type=AuditEventType.ROLE_ASSIGNMENT,
+    resource="user",
+    action="role_change"
+)
 @continuous_verification_audit(
-    event_type=AuditEventType.DATA_UPDATE,
+    event_type=AuditEventType.ROLE_ASSIGNMENT,
     resource="user",
     action="role_change"
 )
@@ -372,6 +388,129 @@ def change_user_role(
     target_user.role = role_update.role
     db.commit()
     db.refresh(target_user)
+    
+    return target_user
+
+# 権限付与/剥奪エンドポイント
+@router.put("/{user_id}/permissions", response_model=UserOut)
+@audit_log(
+    event_type=AuditEventType.PERMISSION_GRANT,
+    resource="user",
+    action="permission_change"
+)
+def change_user_permissions(
+    user_id: str,
+    req: PermissionsChangeRequest,
+    current_user: User = Depends(require_user_permissions(Permission.USER_ROLE_CHANGE)),
+    db: Session = Depends(get_db)   
+):
+    """ユーザーへの権限付与/剥奪（管理者のみ）"""
+    
+    if req.action not in ["grant", "revoke"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="actionは'grant'または'revoke'である必要があります"
+        )
+    
+    # 対象ユーザーを取得
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="ユーザーが見つかりません"
+        )
+    
+    # ロール階層チェック（自分より上位のロールには変更不可）
+    if not RBACService.can_manage_user(current_user, target_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="このユーザーの権限を変更する権限がありません"
+        )
+    
+    # 権限の変更（実際の実装では、ユーザー権限テーブルが必要）
+    # 現在はログ出力のみ
+    action_text = "付与" if req.action == "grant" else "剥奪"
+    logger.info(f"ユーザー {target_user.email} に権限 {req.permissions} を{action_text}しました。実行者: {current_user.email}")
+    
+    return target_user
+
+# ユーザー有効化/無効化エンドポイント
+@router.put("/{user_id}/activation", response_model=UserOut)
+@audit_log(
+    event_type=AuditEventType.USER_ACTIVATION,
+    resource="user",
+    action="activation_change"
+)
+def change_user_activation(
+    user_id: str,
+    req: ActivationUpdateRequest,
+    current_user: User = Depends(require_user_permissions(Permission.USER_UPDATE)),
+    db: Session = Depends(get_db)   
+):
+    """ユーザーの有効化/無効化（管理者のみ）"""
+    
+    # 対象ユーザーを取得
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="ユーザーが見つかりません"
+        )
+    
+    # ロール階層チェック（自分より上位のロールには変更不可）
+    if not RBACService.can_manage_user(current_user, target_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="このユーザーの有効化/無効化を行う権限がありません"
+        )
+    
+    # 有効化/無効化の変更
+    target_user.is_active = req.activation
+    db.commit()
+    db.refresh(target_user)
+    
+    action_text = "有効化" if req.activation else "無効化"
+    logger.info(f"ユーザー {target_user.email} を{action_text}しました。実行者: {current_user.email}")
+    
+    return target_user
+
+# MFA有効化/無効化エンドポイント
+@router.put("/{user_id}/mfa", response_model=UserOut)
+@audit_log(
+    event_type=AuditEventType.MFA_ENABLE,
+    resource="user",
+    action="mfa_change"
+)
+def change_user_mfa(
+    user_id: str,
+    req: MFAUpdateRequest,
+    current_user: User = Depends(require_user_permissions(Permission.USER_UPDATE)),
+    db: Session = Depends(get_db)   
+):
+    """ユーザーのMFA有効化/無効化（管理者のみ）"""
+    
+    # 対象ユーザーを取得
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="ユーザーが見つかりません"
+        )
+    
+    # ロール階層チェック（自分より上位のロールには変更不可）
+    if not RBACService.can_manage_user(current_user, target_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="このユーザーのMFA設定を変更する権限がありません"
+        )
+    
+    # MFA設定の変更
+    target_user.mfa_enabled = req.mfa_enabled
+    db.commit()
+    db.refresh(target_user)
+    
+    action_text = "有効化" if req.mfa_enabled else "無効化"
+    logger.info(f"ユーザー {target_user.email} のMFAを{action_text}しました。実行者: {current_user.email}")
     
     return target_user
 

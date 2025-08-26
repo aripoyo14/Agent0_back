@@ -13,22 +13,94 @@ from app.core.security.jwt import decode_access_token
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional, Union
 import logging
+# 監査ログ用のインポートを追加
+from app.core.security.audit.decorators import audit_log
+from app.core.security.audit.models import AuditEventType
 
 # HTTPBearerの設定（auto_error=Falseで依存段階の即時403を回避）
 oauth2_scheme = HTTPBearer(auto_error=False)
 
 # ロガーの設定（アプリ全体のロガー設定に従う）
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 
 router = APIRouter(prefix="/search_network_map", tags=["Search Network Map"])
 
 
+# デコレータ実行前に request.state に user 情報を注入する依存関係
+async def inject_user_state(
+    request: Request,
+    token: HTTPAuthorizationCredentials | None = Security(oauth2_scheme),
+) -> None:
+    logger.info(f"inject_user_state called for {request.url.path}")
+    
+    token_str = None
+    if token and getattr(token, "credentials", None):
+        token_str = token.credentials
+        logger.info("Token found from HTTPAuthorizationCredentials")
+    else:
+        auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
+        if auth_header and auth_header.lower().startswith("bearer "):
+            token_str = auth_header.split(" ", 1)[1]
+            logger.info("Token found from Authorization header")
+        elif request.headers.get("X-Access-Token"):
+            token_str = request.headers.get("X-Access-Token")
+            logger.info("Token found from X-Access-Token header")
+        elif request.headers.get("X-Auth-Token"):
+            token_str = request.headers.get("X-Auth-Token")
+            logger.info("Token found from X-Auth-Token header")
+        elif request.headers.get("X-Authorization"):
+            token_str = request.headers.get("X-Authorization")
+            if token_str.lower().startswith("bearer "):
+                token_str = token_str.split(" ", 1)[1]
+            logger.info("Token found from X-Authorization header")
+        elif "access_token" in request.cookies:
+            token_str = request.cookies.get("access_token")
+            logger.info("Token found from access_token cookie")
+        elif "jwt" in request.cookies:
+            token_str = request.cookies.get("jwt")
+            logger.info("Token found from jwt cookie")
+        elif "token" in request.cookies:
+            token_str = request.cookies.get("token")
+            logger.info("Token found from token cookie")
+
+    if not token_str:
+        logger.warning("No token found in any source")
+        return None
+
+    logger.info(f"Token found: {token_str[:20]}...")
+    
+    payload_data = decode_access_token(token_str)
+    if not payload_data:
+        logger.warning("Failed to decode token")
+        return None
+
+    user_id = payload_data.get("sub")
+    user_type = payload_data.get("user_type")
+    logger.info(f"Decoded user_id: {user_id}, user_type: {user_type}")
+    
+    try:
+        request.state.user_id = user_id
+        request.state.user_type = user_type
+        request.state.user = {"user_id": user_id, "user_type": user_type}
+        logger.info(f"Successfully set request.state: user_id={request.state.user_id}, user_type={request.state.user_type}")
+    except Exception as e:
+        logger.error(f"Failed to set request.state: {e}")
+        pass
+    return None
+
+
 @router.post("/match", response_model=NetworkMapResponseDTO)
+@audit_log(
+    event_type=AuditEventType.SEARCH_NETWORK_MAP,
+    resource="network_map",
+    action="search_match"
+)
 async def match(
     request: Request,
     payload: MatchRequest,
+    _: None = Depends(inject_user_state),
     db: Session = Depends(get_db),
     token: HTTPAuthorizationCredentials | None = Security(oauth2_scheme),
 ):
@@ -79,6 +151,15 @@ async def match(
         user_id = payload_data.get("sub")
         user_type = payload_data.get("user_type")
         permissions = payload_data.get("scope", [])
+        
+        # 監査デコレータが拾えるように request.state に設定
+        try:
+            if hasattr(request, "state"):
+                request.state.user_id = user_id
+                request.state.user_type = user_type
+                request.state.user = {"user_id": user_id, "user_type": user_type}
+        except Exception:
+            pass
         
         # 必要最低限の情報のみログ
         logger.info(f"/search_network_map/match access by user_id={user_id}, user_type={user_type}")

@@ -11,6 +11,9 @@ from app.crud.expert import get_expert_by_email, get_expert_insights, create_exp
 from app.core.security import verify_password
 from app.core.security.audit import AuditService, AuditEventType
 from app.core.security.rbac.service import RBACService
+from app.core.security.rbac.permissions import Permission
+from app.core.security.rbac.decorators import require_user_permissions
+from app.models.user import User
 from app.core.security.mfa import MFAService
 from app.core.security.rate_limit.dependencies import check_expert_register_rate_limit
 from app.services.invitation_code import InvitationCodeService
@@ -421,7 +424,7 @@ async def login_expert(
 # 現在ログイン中の外部有識者のプロフィール情報取得用のエンドポイント
 @router.get("/me", response_model=ExpertOut)
 @continuous_verification_audit(
-    event_type=AuditEventType.DATA_READ,
+    event_type=AuditEventType.READ_EXPERT_PROFILE,
     resource="expert",
     action="read_profile"
 )
@@ -516,6 +519,11 @@ async def get_expert_profile(
 
 # エキスパートの活動インサイト取得
 @router.get("/{expert_id}/insights", response_model=ExpertInsightsOut)
+@audit_log(
+    event_type=AuditEventType.READ_EXPERT_INSIGHTS,
+    resource="expert_insights",
+    action="read"
+)
 def get_insights(expert_id: str, db: Session = Depends(get_db)):
     try:
         # 事前にエキスパートの存在を確認し、存在しない場合は404
@@ -658,3 +666,36 @@ async def logout_expert(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"ログアウト処理中にエラー: {str(e)}"
         )
+
+# 専門家有効化/無効化エンドポイント
+@router.put("/{expert_id}/activation", response_model=ExpertOut)
+@audit_log(
+    event_type=AuditEventType.EXPERT_ACTIVATION,
+    resource="expert",
+    action="activation_change"
+)
+def change_expert_activation(
+    expert_id: str,
+    activation: bool,
+    current_user: User = Depends(require_user_permissions(Permission.EXPERT_UPDATE)),
+    db: Session = Depends(get_db)   
+):
+    """専門家の有効化/無効化（管理者のみ）"""
+    
+    # 対象専門家を取得
+    target_expert = db.query(Expert).filter(Expert.id == expert_id).first()
+    if not target_expert:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="専門家が見つかりません"
+        )
+    
+    # 有効化/無効化の変更
+    target_expert.is_active = activation
+    db.commit()
+    db.refresh(target_expert)
+    
+    action_text = "有効化" if activation else "無効化"
+    logger.info(f"専門家 {target_expert.email} を{action_text}しました。実行者: {current_user.email}")
+    
+    return target_expert

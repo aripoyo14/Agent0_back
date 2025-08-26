@@ -61,7 +61,7 @@ async def create_meeting(
 
 @router.get("/{meeting_id}", response_model=MeetingResponse, summary="Get Meeting")
 @audit_log(
-    event_type=AuditEventType.DATA_READ,
+    event_type=AuditEventType.READ_MEETING_DETAILS,
     resource="meeting",
     action="read"
 )
@@ -82,7 +82,7 @@ async def get_meeting(
 
 @router.get("/", response_model=List[MeetingResponse], summary="Get All Meetings")
 @audit_log(
-    event_type=AuditEventType.DATA_READ,
+    event_type=AuditEventType.READ_MEETING_DETAILS,
     resource="meeting",
     action="list"
 )
