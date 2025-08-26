@@ -553,15 +553,40 @@ async def get_policy_proposals_by_multiple_tags(
 async def get_policy_proposal_detail(  # asyncを追加
     http_request: Request,
     proposal_id: str, 
-    current_user: User = Depends(require_permissions(Permission.POLICY_READ)),  # 🔒 権限チェックを依存関係として使用
+    auth_data: dict = Depends(get_current_user_authenticated),  # 🔒 認証情報を取得
     db: Session = Depends(get_db)
 ):
     """
     主キー（UUID文字列）を指定して政策案の詳細を取得する。
     政策タグ情報も含めて返却する。
     
-    🔒 権限: POLICY_READ が必要
+    🔒 権限: POLICY_READ が必要（User/Expert両方対応）
     """
+    from app.core.security.rbac import RBACService
+    from app.core.security.rbac.permissions import Permission
+    from app.models.user import User
+    from app.models.expert import Expert
+
+    user_id = auth_data.get("user_id")
+    user_type = auth_data.get("user_type")
+    if not user_id or not user_type:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="認証情報が取得できませんでした")
+
+    # Expert（外部有識者）の場合
+    if user_type == "expert":
+        expert = db.query(Expert).filter(Expert.id == user_id).first()
+        if not expert:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="有識者が見つかりません")
+        if not RBACService.check_expert_permission(expert, Permission.POLICY_READ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="政策案閲覧権限がありません")
+    # User（経産省職員）の場合
+    else:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="ユーザーが見つかりません")
+        if not RBACService.check_user_permission(user, Permission.POLICY_READ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="政策案閲覧権限がありません")
+
     proposal = get_proposal(db=db, proposal_id=proposal_id)
     if not proposal:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy proposal not found")
