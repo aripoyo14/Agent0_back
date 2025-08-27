@@ -5,6 +5,7 @@
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 import logging
 from app.schemas.policy_proposal.policy_proposal import ProposalCreate, ProposalOut, AttachmentOut, PolicySubmissionHistory
@@ -22,6 +23,7 @@ from app.models.policy_proposal.policy_proposal_attachments import PolicyProposa
 from app.db.session import SessionLocal
 from app.core.blob import upload_binary_to_blob, delete_blob
 from app.core.dependencies import get_current_user, get_current_user_authenticated  # get_current_user_authenticatedを追加
+from app.api.routes.search_network_map import inject_user_state
 from uuid import UUID, uuid4
 import os
 from app.core.security.audit import AuditService, AuditEventType
@@ -32,6 +34,10 @@ from typing import List, Optional
 from sqlalchemy.orm import joinedload
 from app.models.policy_proposal.policy_proposal import PolicyProposal
 from app.models.policy_tag import PolicyTag
+from azure.storage.blob import BlobServiceClient
+import io
+from datetime import datetime
+from urllib.parse import quote
 
 # ロガーの設定
 logger = logging.getLogger(__name__)
@@ -167,7 +173,16 @@ async def create_policy_proposal_with_attachments(
                 # ファイルをBlobストレージにアップロード
                 blob_name = f"policy_proposals/{proposal.id}/{file.filename}"
                 file_content = await file.read()
-                file_url = upload_binary_to_blob(file_content, blob_name)
+                
+                try:
+                    file_url = upload_binary_to_blob(file_content, blob_name)
+                    logger.info(f"ファイルアップロード成功: {file.filename} -> {file_url}")
+                except Exception as upload_error:
+                    logger.error(f"ファイルアップロード失敗: {file.filename}, エラー: {upload_error}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"ファイルのアップロードに失敗しました: {file.filename}"
+                    )
                 
                 # 添付ファイル情報をDBに保存
                 attachment = create_attachment(
@@ -672,3 +687,246 @@ async def _cleanup_uploaded_blobs(uploaded_blobs: list[tuple[str, str]]):
         except Exception as cleanup_error:
             logger.error(f"Blobファイル削除でエラー: {cleanup_error}")
             # クリーンアップの失敗はログに記録するが、メインエラーは発生させない
+
+
+# ファイルプレビュー・ダウンロード機能のエンドポイント
+
+@router.get("/attachments/{attachment_id}/download")
+@audit_log(
+    event_type=AuditEventType.DATA_READ,
+    resource="policy_proposal_attachment",
+    action="download"
+)
+async def download_attachment(
+    attachment_id: str,
+    _: None = Depends(inject_user_state),
+    current_user: User = Depends(require_permissions(Permission.POLICY_READ)),
+    db: Session = Depends(get_db)
+):
+    """
+    添付ファイルをダウンロードするエンドポイント
+    
+    - Azure Blob Storageからファイルを取得
+    - 適切なContent-TypeとContent-Dispositionヘッダーを設定
+    - ストリーミングレスポンスで返却
+    
+    🔒 権限: POLICY_READ が必要
+    """
+    try:
+        # 1. 添付ファイル情報をDBから取得
+        attachment = db.query(PolicyProposalAttachment).filter(
+            PolicyProposalAttachment.id == attachment_id
+        ).first()
+        
+        if not attachment:
+            raise HTTPException(status_code=404, detail="Attachment not found")
+        
+        # 2. ローカルファイルパスの場合の処理
+        if attachment.file_url.startswith('local://'):
+            # local:// パスのファイルは無効として扱う
+            raise HTTPException(
+                status_code=404, 
+                detail="このファイルは無効な状態です。管理者にお問い合わせください。"
+            )
+        
+        # 3. Azure Blob Storageの場合の処理
+        from app.core.config import get_settings
+        settings = get_settings()
+        
+        blob_service_client = BlobServiceClient.from_connection_string(
+            settings.azure_storage_connection_string
+        )
+        container_client = blob_service_client.get_container_client(
+            settings.azure_blob_container
+        )
+        
+        # Blob名の抽出とログ出力
+        blob_name = attachment.get_blob_name()
+        logger.info(f"ダウンロード - 添付ファイルID: {attachment_id}")
+        logger.info(f"ダウンロード - 抽出されたBlob名: {blob_name}")
+        
+        blob_client = container_client.get_blob_client(blob_name)
+        
+        # 4. ファイル存在チェック
+        try:
+            properties = blob_client.get_blob_properties()
+            logger.info(f"ダウンロード - ファイルサイズ: {properties.size} bytes")
+        except Exception as e:
+            logger.error(f"ダウンロード - ファイルが見つかりません: {blob_name}, エラー: {e}")
+            raise HTTPException(status_code=404, detail="ファイルが見つかりません")
+        
+        # 5. ファイルをストリーミングで返却
+        blob_data = blob_client.download_blob()
+        
+        def generate():
+            for chunk in blob_data.chunks():
+                yield chunk
+        
+        # 日本語ファイル名を適切にエンコード
+        encoded_filename = quote(attachment.file_name, safe='')
+        
+        return StreamingResponse(
+            generate(),
+            media_type=attachment.file_type or "application/octet-stream",
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"ファイルダウンロードエラー: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="ファイルのダウンロードに失敗しました"
+        )
+
+
+@router.get("/attachments/{attachment_id}/preview")
+@audit_log(
+    event_type=AuditEventType.DATA_READ,
+    resource="policy_proposal_attachment",
+    action="preview"
+)
+async def preview_attachment(
+    attachment_id: str,
+    _: None = Depends(inject_user_state),
+    current_user: User = Depends(require_permissions(Permission.POLICY_READ)),
+    db: Session = Depends(get_db)
+):
+    """
+    PDFファイルをプレビュー用に返却するエンドポイント
+    
+    - PDFファイルのみ対応
+    - Content-Type: application/pdf
+    - インライン表示用のヘッダー設定
+    
+    🔒 権限: POLICY_READ が必要
+    """
+    try:
+        # 1. 添付ファイル情報をDBから取得
+        attachment = db.query(PolicyProposalAttachment).filter(
+            PolicyProposalAttachment.id == attachment_id
+        ).first()
+        
+        if not attachment:
+            raise HTTPException(status_code=404, detail="Attachment not found")
+        
+        # 2. PDFファイルのみプレビュー対応
+        if attachment.file_type != "application/pdf":
+            raise HTTPException(
+                status_code=400, 
+                detail="プレビューはPDFファイルのみ対応しています"
+            )
+        
+        # 3. ローカルファイルパスの場合の処理
+        if attachment.file_url.startswith('local://'):
+            # local:// パスのファイルは無効として扱う
+            raise HTTPException(
+                status_code=404, 
+                detail="このファイルは無効な状態です。管理者にお問い合わせください。"
+            )
+        
+        # 4. Azure Blob Storageの場合の処理
+        from app.core.config import get_settings
+        settings = get_settings()
+        
+        blob_service_client = BlobServiceClient.from_connection_string(
+            settings.azure_storage_connection_string
+        )
+        container_client = blob_service_client.get_container_client(
+            settings.azure_blob_container
+        )
+        
+        # Blob名の抽出とログ出力
+        blob_name = attachment.get_blob_name()
+        logger.info(f"添付ファイルID: {attachment_id}")
+        logger.info(f"元のURL: {attachment.file_url}")
+        logger.info(f"抽出されたBlob名: {blob_name}")
+        
+        blob_client = container_client.get_blob_client(blob_name)
+        
+        # 5. ファイル存在チェック
+        try:
+            properties = blob_client.get_blob_properties()
+            logger.info(f"ファイルサイズ: {properties.size} bytes")
+        except Exception as e:
+            logger.error(f"ファイルが見つかりません: {blob_name}, エラー: {e}")
+            raise HTTPException(status_code=404, detail="ファイルが見つかりません")
+        
+        # 6. ファイルをストリーミングで返却
+        blob_data = blob_client.download_blob()
+        
+        def generate():
+            for chunk in blob_data.chunks():
+                yield chunk
+        
+        # 日本語ファイル名を適切にエンコード
+        encoded_filename = quote(attachment.file_name, safe='')
+        
+        return StreamingResponse(
+            generate(),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"inline; filename*=UTF-8''{encoded_filename}",
+                "Cache-Control": "public, max-age=3600"  # 1時間キャッシュ
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"ファイルプレビューエラー: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="ファイルのプレビューに失敗しました"
+        )
+
+
+@router.get("/attachments/validate")
+@audit_log(
+    event_type=AuditEventType.DATA_READ,
+    resource="policy_proposal_attachment",
+    action="validate"
+)
+async def validate_attachments(
+    current_user: User = Depends(require_permissions(Permission.POLICY_READ)),
+    db: Session = Depends(get_db)
+):
+    """
+    既存の添付ファイルの整合性をチェック（管理者用）
+    
+    - local:// パスのファイルを検出
+    - 無効なファイルの一覧を返却
+    - データベースの整合性を確認
+    
+    🔒 権限: POLICY_READ が必要
+    """
+    try:
+        attachments = db.query(PolicyProposalAttachment).all()
+        invalid_attachments = []
+        
+        for attachment in attachments:
+            if attachment.file_url.startswith('local://'):
+                invalid_attachments.append({
+                    'id': attachment.id,
+                    'file_name': attachment.file_name,
+                    'file_url': attachment.file_url,
+                    'issue': 'local:// パスは無効です',
+                    'policy_proposal_id': attachment.policy_proposal_id
+                })
+        
+        return {
+            'total_attachments': len(attachments),
+            'invalid_attachments': invalid_attachments,
+            'valid_attachments': len(attachments) - len(invalid_attachments),
+            'validation_date': datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"添付ファイル整合性チェックエラー: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="添付ファイルの整合性チェックに失敗しました"
+        )
