@@ -734,9 +734,16 @@ async def download_attachment(
         settings = get_settings()
         
         # Azure設定の詳細ログ
+        import os
         logger.info(f"ダウンロード - Azure設定確認:")
-        logger.info(f"  - connection_string設定: {'あり' if settings.azure_storage_connection_string else 'なし'}")
-        logger.info(f"  - container設定: {settings.azure_blob_container}")
+        logger.info(f"  - settings.azure_storage_connection_string: {'あり' if settings.azure_storage_connection_string else 'なし'}")
+        logger.info(f"  - os.getenv('AZURE_STORAGE_CONNECTION_STRING'): {'あり' if os.getenv('AZURE_STORAGE_CONNECTION_STRING') else 'なし'}")
+        logger.info(f"  - settings.azure_blob_container: {settings.azure_blob_container}")
+        logger.info(f"  - os.getenv('AZURE_BLOB_CONTAINER'): {os.getenv('AZURE_BLOB_CONTAINER')}")
+        
+        # 環境変数の詳細確認
+        azure_env_vars = [key for key in os.environ.keys() if 'AZURE' in key.upper()]
+        logger.info(f"  - Azure関連環境変数: {azure_env_vars}")
         
         if not settings.azure_storage_connection_string:
             logger.error("ダウンロード - Azure Blob Storage connection string is not configured")
@@ -851,10 +858,18 @@ async def preview_attachment(
         settings = get_settings()
         
         # Azure設定の詳細ログ
+        import os
         logger.info(f"Azure設定確認:")
-        logger.info(f"  - connection_string設定: {'あり' if settings.azure_storage_connection_string else 'なし'}")
-        logger.info(f"  - container設定: {settings.azure_blob_container}")
+        logger.info(f"  - settings.azure_storage_connection_string: {'あり' if settings.azure_storage_connection_string else 'なし'}")
+        logger.info(f"  - os.getenv('AZURE_STORAGE_CONNECTION_STRING'): {'あり' if os.getenv('AZURE_STORAGE_CONNECTION_STRING') else 'なし'}")
+        logger.info(f"  - settings.azure_blob_container: {settings.azure_blob_container}")
+        logger.info(f"  - os.getenv('AZURE_BLOB_CONTAINER'): {os.getenv('AZURE_BLOB_CONTAINER')}")
         logger.info(f"  - connection_string長さ: {len(settings.azure_storage_connection_string) if settings.azure_storage_connection_string else 0}")
+        logger.info(f"  - os.getenv長さ: {len(os.getenv('AZURE_STORAGE_CONNECTION_STRING', ''))}")
+        
+        # 環境変数の詳細確認
+        azure_env_vars = [key for key in os.environ.keys() if 'AZURE' in key.upper()]
+        logger.info(f"  - Azure関連環境変数: {azure_env_vars}")
         
         if not settings.azure_storage_connection_string:
             logger.error("Azure Blob Storage connection string is not configured")
