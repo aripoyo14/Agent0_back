@@ -733,12 +733,26 @@ async def download_attachment(
         from app.core.config import get_settings
         settings = get_settings()
         
-        blob_service_client = BlobServiceClient.from_connection_string(
-            settings.azure_storage_connection_string
-        )
-        container_client = blob_service_client.get_container_client(
-            settings.azure_blob_container
-        )
+        # Azure設定の詳細ログ
+        logger.info(f"ダウンロード - Azure設定確認:")
+        logger.info(f"  - connection_string設定: {'あり' if settings.azure_storage_connection_string else 'なし'}")
+        logger.info(f"  - container設定: {settings.azure_blob_container}")
+        
+        if not settings.azure_storage_connection_string:
+            logger.error("ダウンロード - Azure Blob Storage connection string is not configured")
+            raise HTTPException(status_code=500, detail="Azure Blob Storage設定が不完全です")
+        
+        try:
+            blob_service_client = BlobServiceClient.from_connection_string(
+                settings.azure_storage_connection_string
+            )
+            container_client = blob_service_client.get_container_client(
+                settings.azure_blob_container
+            )
+            logger.info("ダウンロード - Azure Blob Storage接続成功")
+        except Exception as azure_error:
+            logger.error(f"ダウンロード - Azure Blob Storage接続エラー: {azure_error}")
+            raise HTTPException(status_code=500, detail=f"Azure Blob Storage接続に失敗しました: {str(azure_error)}")
         
         # Blob名の抽出とログ出力
         blob_name = attachment.get_blob_name()
@@ -777,6 +791,10 @@ async def download_attachment(
         raise
     except Exception as e:
         logger.error(f"ファイルダウンロードエラー: {e}")
+        logger.error(f"エラータイプ: {type(e).__name__}")
+        logger.error(f"エラーの詳細: {str(e)}")
+        import traceback
+        logger.error(f"スタックトレース: {traceback.format_exc()}")
         raise HTTPException(
             status_code=500,
             detail="ファイルのダウンロードに失敗しました"
@@ -832,12 +850,27 @@ async def preview_attachment(
         from app.core.config import get_settings
         settings = get_settings()
         
-        blob_service_client = BlobServiceClient.from_connection_string(
-            settings.azure_storage_connection_string
-        )
-        container_client = blob_service_client.get_container_client(
-            settings.azure_blob_container
-        )
+        # Azure設定の詳細ログ
+        logger.info(f"Azure設定確認:")
+        logger.info(f"  - connection_string設定: {'あり' if settings.azure_storage_connection_string else 'なし'}")
+        logger.info(f"  - container設定: {settings.azure_blob_container}")
+        logger.info(f"  - connection_string長さ: {len(settings.azure_storage_connection_string) if settings.azure_storage_connection_string else 0}")
+        
+        if not settings.azure_storage_connection_string:
+            logger.error("Azure Blob Storage connection string is not configured")
+            raise HTTPException(status_code=500, detail="Azure Blob Storage設定が不完全です")
+        
+        try:
+            blob_service_client = BlobServiceClient.from_connection_string(
+                settings.azure_storage_connection_string
+            )
+            container_client = blob_service_client.get_container_client(
+                settings.azure_blob_container
+            )
+            logger.info("Azure Blob Storage接続成功")
+        except Exception as azure_error:
+            logger.error(f"Azure Blob Storage接続エラー: {azure_error}")
+            raise HTTPException(status_code=500, detail=f"Azure Blob Storage接続に失敗しました: {str(azure_error)}")
         
         # Blob名の抽出とログ出力
         blob_name = attachment.get_blob_name()
@@ -878,6 +911,10 @@ async def preview_attachment(
         raise
     except Exception as e:
         logger.error(f"ファイルプレビューエラー: {e}")
+        logger.error(f"エラータイプ: {type(e).__name__}")
+        logger.error(f"エラーの詳細: {str(e)}")
+        import traceback
+        logger.error(f"スタックトレース: {traceback.format_exc()}")
         raise HTTPException(
             status_code=500,
             detail="ファイルのプレビューに失敗しました"
