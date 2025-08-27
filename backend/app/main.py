@@ -29,6 +29,13 @@ async def startup_event():
     # レート制限サービスの初期化を確認
     from app.core.security.rate_limit.service import rate_limit_service
     logger.info(f"レート制限サービス初期化完了: enabled={rate_limit_service.config.enabled}")
+    
+    # Azure Blob Storage設定の検証
+    from app.core.blob import validate_blob_storage_config
+    if not validate_blob_storage_config():
+        logger.error("Azure Blob Storage configuration is invalid. File uploads may not work correctly.")
+    else:
+        logger.info("Azure Blob Storage configuration is valid.")
 
 """ ----------
  ルーター登録

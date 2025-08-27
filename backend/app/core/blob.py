@@ -1,6 +1,7 @@
 from azure.storage.blob import BlobServiceClient
 import logging
 from app.core.config import get_settings
+from fastapi import HTTPException
 
 # ロガーの設定
 logger = logging.getLogger(__name__)
@@ -34,27 +35,58 @@ container_client = get_container_client()
 meeting_container_client = get_meeting_container_client()
 
 def upload_binary_to_blob(file, filename: str) -> str:
-    if container_client is None:
-        # Azure接続が設定されていない場合は、ローカルファイルパスを返す
-        return f"local://{filename}"
+    """ファイルをAzure Blob Storageにアップロード（改善版）"""
+    logger.info(f"ファイルアップロード開始: {filename}")
     
-    blob_client = container_client.get_blob_client(filename)
-    blob_client.upload_blob(file, overwrite=True)
-    return blob_client.url  # ←保存用URL
+    if not AZURE_CONNECTION_STRING:
+        logger.error("Azure Blob Storage connection string is not configured")
+        raise ValueError("Azure Blob Storage connection string is not configured")
+    
+    logger.info(f"Azure Blob Storage設定確認: container={AZURE_BLOB_CONTAINER}")
+    
+    try:
+        blob_service_client = BlobServiceClient.from_connection_string(AZURE_CONNECTION_STRING)
+        container_client = blob_service_client.get_container_client(AZURE_BLOB_CONTAINER)
+        blob_client = container_client.get_blob_client(filename)
+        
+        logger.info(f"Blobクライアント作成完了: {filename}")
+        blob_client.upload_blob(file, overwrite=True)
+        
+        result_url = blob_client.url
+        logger.info(f"ファイルアップロード成功: {filename} -> {result_url}")
+        return result_url
+        
+    except Exception as e:
+        logger.error(f"Azure Blob Storageアップロード失敗: {filename}, エラー: {e}")
+        logger.error(f"エラータイプ: {type(e).__name__}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"ファイルのアップロードに失敗しました。Azure Blob Storageの設定を確認してください。エラー: {str(e)}"
+        )
 
 def upload_video_to_blob(file, filename: str) -> str:
     # 後方互換: 既存の動画アップロード呼び出しをサポート
     return upload_binary_to_blob(file, filename)
 
 def upload_meeting_minutes_to_blob(file, filename: str) -> str:
-    """面談録専用のアップロード関数"""
-    if meeting_container_client is None:
-        # Azure接続が設定されていない場合は、ローカルファイルパスを返す
-        return f"local://{filename}"
+    """面談録専用のアップロード関数（改善版）"""
+    if not AZURE_CONNECTION_STRING:
+        logger.error("Azure Blob Storage connection string is not configured")
+        raise ValueError("Azure Blob Storage connection string is not configured")
     
-    blob_client = meeting_container_client.get_blob_client(filename)
-    blob_client.upload_blob(file, overwrite=True)
-    return blob_client.url
+    try:
+        blob_service_client = BlobServiceClient.from_connection_string(AZURE_CONNECTION_STRING)
+        container_client = blob_service_client.get_container_client(AZURE_MEETING_CONTAINER)
+        blob_client = container_client.get_blob_client(filename)
+        blob_client.upload_blob(file, overwrite=True)
+        logger.info(f"Meeting minutes uploaded successfully to Azure Blob Storage: {filename}")
+        return blob_client.url
+    except Exception as e:
+        logger.error(f"Failed to upload meeting minutes to Azure Blob Storage: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="面談録のアップロードに失敗しました。Azure Blob Storageの設定を確認してください。"
+        )
 
 def delete_blob(blob_name: str) -> bool:
     """Blobストレージからファイルを削除"""
@@ -84,4 +116,21 @@ def delete_blob(blob_name: str) -> bool:
         
     except Exception as e:
         logger.error(f"Blobファイル削除失敗: {blob_name}, エラー: {e}")
+        return False
+
+
+def validate_blob_storage_config():
+    """アプリケーション起動時にAzure Blob Storageの設定を検証"""
+    if not AZURE_CONNECTION_STRING:
+        logger.warning("Azure Blob Storage connection string is not configured")
+        return False
+    
+    try:
+        blob_service_client = BlobServiceClient.from_connection_string(AZURE_CONNECTION_STRING)
+        container_client = blob_service_client.get_container_client(AZURE_BLOB_CONTAINER)
+        container_client.get_container_properties()
+        logger.info("Azure Blob Storage configuration is valid")
+        return True
+    except Exception as e:
+        logger.error(f"Azure Blob Storage configuration is invalid: {e}")
         return False
